@@ -8,29 +8,36 @@ enum Route: Hashable {
 
 struct HomeView: View {
     @Environment(StatsStore.self) private var stats
-    @AppStorage("selectedDans") private var selectedRaw = "2,3,4,5,6,7,8,9"
+    @AppStorage("level") private var level: Level = .twoByTwo
+    @AppStorage("customAMin") private var customAMin = 11
+    @AppStorage("customAMax") private var customAMax = 99
+    @AppStorage("customBMin") private var customBMin = 11
+    @AppStorage("customBMax") private var customBMax = 19
     @State private var path: [Route] = []
 
-    private var selected: [Int] {
-        selectedRaw.split(separator: ",").compactMap { Int($0) }.sorted()
+    private var ranges: (a: ClosedRange<Int>, b: ClosedRange<Int>) {
+        level.ranges ?? (
+            min(customAMin, customAMax)...max(customAMin, customAMax),
+            min(customBMin, customBMax)...max(customBMin, customBMax)
+        )
     }
 
-    private func setSelected(_ dans: Set<Int>) {
-        selectedRaw = dans.sorted().map(String.init).joined(separator: ",")
+    private func config(_ mode: QuizMode) -> QuizConfig {
+        QuizConfig(aRange: ranges.a, bRange: ranges.b, mode: mode)
     }
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    danPicker
+                    levelPicker
                     modes
                     more
                 }
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("구구단")
+            .navigationTitle("99단")
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .quiz(let config): QuizView(config: config)
@@ -41,85 +48,88 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - 단 선택
+    // MARK: - 범위 선택
 
-    private var danPicker: some View {
+    private var levelPicker: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("단 선택").font(.title3.bold())
-                Spacer()
-                Button(selected.count == 8 ? "모두 해제" : "전체 선택") {
-                    setSelected(selected.count == 8 ? [] : Set(2...9))
-                }
-                .font(.subheadline.weight(.semibold))
-            }
+            Text("범위").font(.title3.bold())
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
-                ForEach(2...9, id: \.self) { dan in
-                    let isOn = selected.contains(dan)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(Level.allCases) { item in
+                    let isOn = level == item
                     Button {
-                        var s = Set(selected)
-                        if isOn { s.remove(dan) } else { s.insert(dan) }
-                        setSelected(s)
+                        level = item
                     } label: {
-                        Text("\(dan)단")
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                            .foregroundStyle(isOn ? Color.white : Color.primary)
-                            .background(
-                                isOn ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            )
+                        VStack(spacing: 4) {
+                            Text(item.title)
+                                .font(.system(.headline, design: .rounded))
+                            Text(rangeText(item))
+                                .font(.caption.monospacedDigit())
+                                .opacity(0.8)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .foregroundStyle(isOn ? Color.white : Color.primary)
+                        .background(
+                            isOn ? AnyShapeStyle(Color.accentColor.gradient) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
                     }
                     .buttonStyle(PressStyle())
                     .sensoryFeedback(.selection, trigger: isOn)
                 }
             }
+
+            if level == .custom {
+                VStack(spacing: 4) {
+                    RangeStepper(title: "앞 수", low: $customAMin, high: $customAMax)
+                    Divider()
+                    RangeStepper(title: "뒤 수", low: $customBMin, high: $customBMax)
+                }
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
         }
+        .animation(.snappy, value: level)
+    }
+
+    private func rangeText(_ item: Level) -> String {
+        let r = item.ranges ?? ranges
+        return "\(r.a.lowerBound)~\(r.a.upperBound) × \(r.b.lowerBound)~\(r.b.upperBound)"
     }
 
     // MARK: - 모드
 
     private var modes: some View {
         VStack(spacing: 12) {
-            let noDans = selected.isEmpty
             let weakCount = stats.weakProblems.count
 
-            NavigationLink(value: Route.quiz(QuizConfig(dans: selected, mode: .practice))) {
+            NavigationLink(value: Route.quiz(config(.practice))) {
                 ModeCard(
                     title: "연습하기",
-                    subtitle: "\(QuizMode.practiceCount)문제 · 틀린 문제는 더 자주 나와요",
+                    subtitle: "\(QuizMode.practiceCount)문제 · 모르면 💡 풀이 보기",
                     systemImage: "pencil",
                     tint: .blue
                 )
             }
-            .disabled(noDans)
 
-            NavigationLink(value: Route.quiz(QuizConfig(dans: selected, mode: .timeAttack))) {
+            NavigationLink(value: Route.quiz(config(.timeAttack))) {
                 ModeCard(
                     title: "타임어택",
-                    subtitle: "\(QuizMode.timeAttackSeconds)초 도전 · 최고 기록 \(stats.bestTimeAttack)개",
+                    subtitle: "\(QuizMode.timeAttackSeconds / 60)분 도전 · 최고 기록 \(stats.bestTimeAttack)개",
                     systemImage: "timer",
                     tint: .orange
                 )
             }
-            .disabled(noDans)
 
-            NavigationLink(value: Route.quiz(QuizConfig(dans: [], mode: .review))) {
+            NavigationLink(value: Route.quiz(config(.review))) {
                 ModeCard(
                     title: "오답 집중",
-                    subtitle: weakCount == 0 ? "약한 문제가 없어요 👏" : "약한 문제 \(weakCount)개 복습",
+                    subtitle: weakCount == 0 ? "약한 문제가 없어요 👏" : "틀리거나 풀이 본 문제 \(weakCount)개 복습",
                     systemImage: "exclamationmark.arrow.circlepath",
                     tint: .red
                 )
             }
             .disabled(weakCount == 0)
-
-            if noDans {
-                Text("연습할 단을 하나 이상 골라주세요")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
         .buttonStyle(PressStyle())
     }
@@ -127,13 +137,31 @@ struct HomeView: View {
     private var more: some View {
         HStack(spacing: 12) {
             NavigationLink(value: Route.table) {
-                SmallCard(title: "구구단표", systemImage: "tablecells")
+                SmallCard(title: "곱셈표", systemImage: "tablecells")
             }
             NavigationLink(value: Route.stats) {
                 SmallCard(title: "내 기록", systemImage: "chart.bar.xaxis")
             }
         }
         .buttonStyle(PressStyle())
+    }
+}
+
+struct RangeStepper: View {
+    let title: String
+    @Binding var low: Int
+    @Binding var high: Int
+
+    var body: some View {
+        HStack {
+            Text(title).font(.subheadline.weight(.semibold)).frame(width: 44, alignment: .leading)
+            Stepper("\(low)", value: $low, in: 2...99).fixedSize()
+            Spacer()
+            Text("~").foregroundStyle(.secondary)
+            Spacer()
+            Stepper("\(high)", value: $high, in: 2...99).fixedSize()
+        }
+        .font(.body.monospacedDigit())
     }
 }
 

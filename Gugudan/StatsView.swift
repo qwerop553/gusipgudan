@@ -3,6 +3,7 @@ import SwiftUI
 struct StatsView: View {
     @Environment(StatsStore.self) private var stats
     @State private var confirmReset = false
+    @State private var shown: Problem?
 
     var body: some View {
         List {
@@ -12,22 +13,31 @@ struct StatsView: View {
                 LabeledContent("타임어택 최고", value: "\(stats.bestTimeAttack)개")
             }
 
-            Section("단별 정답률") {
-                ForEach(2...9, id: \.self) { dan in
-                    HStack(spacing: 12) {
-                        Text("\(dan)단")
-                            .frame(width: 40, alignment: .leading)
-                        if let acc = stats.accuracy(dan: dan) {
-                            ProgressView(value: acc)
-                                .tint(color(for: acc))
-                            Text("\(Int((acc * 100).rounded()))%")
-                                .monospacedDigit()
-                                .frame(width: 48, alignment: .trailing)
-                        } else {
-                            Text("아직 기록 없음").foregroundStyle(.secondary)
+            Section("유형별") {
+                ForEach(Problem.Kind.allCases, id: \.self) { kind in
+                    let summary = stats.summary(of: kind)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(kind.title).font(.subheadline.weight(.semibold))
                             Spacer()
+                            if let avg = summary.averageTime {
+                                Label(String(format: "평균 %.1f초", avg), systemImage: "stopwatch")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if let acc = summary.accuracy {
+                            HStack(spacing: 12) {
+                                ProgressView(value: acc).tint(color(for: acc))
+                                Text("\(Int((acc * 100).rounded()))%")
+                                    .monospacedDigit()
+                                    .frame(width: 48, alignment: .trailing)
+                            }
+                        } else {
+                            Text("아직 기록 없음").font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    .padding(.vertical, 2)
                 }
             }
 
@@ -38,13 +48,18 @@ struct StatsView: View {
                 }
                 ForEach(weak) { p in
                     let r = stats.records[p.id] ?? .init()
-                    HStack {
-                        Text("\(p.text) = \(p.answer)")
-                            .font(.system(.body, design: .rounded).bold())
-                        Spacer()
-                        Text("✗ \(r.wrong)  ✓ \(r.correct)")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                    Button {
+                        shown = p
+                    } label: {
+                        HStack {
+                            Text("\(p.text) = \(p.answer)")
+                                .font(.system(.body, design: .rounded).bold())
+                                .foregroundStyle(Color.primary)
+                            Spacer()
+                            Text("✗ \(r.wrong)  ✓ \(r.correct)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -54,6 +69,9 @@ struct StatsView: View {
             }
         }
         .navigationTitle("내 기록")
+        .sheet(item: $shown) { p in
+            HandCalcSheet(problem: p)
+        }
         .confirmationDialog("모든 기록을 지울까요?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("초기화", role: .destructive) { stats.reset() }
         }
