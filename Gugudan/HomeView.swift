@@ -17,7 +17,7 @@ struct HomeView: View {
 
     private var ranges: (a: ClosedRange<Int>, b: ClosedRange<Int>) {
         level.ranges ?? (
-            min(customAMin, customAMax)...max(customAMin, customAMax),
+            max(11, min(customAMin, customAMax))...max(11, customAMin, customAMax),
             min(customBMin, customBMax)...max(customBMin, customBMax)
         )
     }
@@ -81,9 +81,9 @@ struct HomeView: View {
 
             if level == .custom {
                 VStack(spacing: 4) {
-                    RangeStepper(title: "앞 수", low: $customAMin, high: $customAMax)
+                    RangeStepper(title: "앞 수", bounds: 11...99, low: $customAMin, high: $customAMax)
                     Divider()
-                    RangeStepper(title: "뒤 수", low: $customBMin, high: $customBMax)
+                    RangeStepper(title: "뒤 수", bounds: 2...99, low: $customBMin, high: $customBMax)
                 }
                 .padding()
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -149,17 +149,18 @@ struct HomeView: View {
 
 struct RangeStepper: View {
     let title: String
+    let bounds: ClosedRange<Int>
     @Binding var low: Int
     @Binding var high: Int
 
     var body: some View {
         HStack {
             Text(title).font(.subheadline.weight(.semibold)).frame(width: 44, alignment: .leading)
-            Stepper("\(low)", value: $low, in: 2...99).fixedSize()
+            Stepper("\(low)", value: $low, in: bounds).fixedSize()
             Spacer()
             Text("~").foregroundStyle(.secondary)
             Spacer()
-            Stepper("\(high)", value: $high, in: 2...99).fixedSize()
+            Stepper("\(high)", value: $high, in: bounds).fixedSize()
         }
         .font(.body.monospacedDigit())
     }

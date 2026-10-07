@@ -8,14 +8,14 @@ struct TableView: View {
     var body: some View {
         List {
             Section {
-                Stepper(value: $number, in: 2...99) {
+                Stepper(value: $number, in: 11...99) {
                     Text("\(number)단")
                         .font(.system(.title2, design: .rounded).bold())
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(.snappy, value: number)
                 }
-                Slider(value: Binding(get: { Double(number) }, set: { number = Int($0.rounded()) }), in: 2...99, step: 1)
+                Slider(value: Binding(get: { Double(number) }, set: { number = Int($0.rounded()) }), in: 11...99, step: 1)
             }
 
             Section {
@@ -40,6 +40,7 @@ struct TableView: View {
             }
         }
         .navigationTitle("곱셈표")
+        .onAppear { number = min(max(number, 11), 99) }
         .sheet(item: $shown) { p in
             HandCalcSheet(problem: p)
         }
