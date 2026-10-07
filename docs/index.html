@@ -339,15 +339,17 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     custom:   { t: '직접 설정' },
   };
   const PCT_TYPES = {
-    mix:    { t: '섞어서',     ex: '네 유형 모두' },
+    mix:    { t: '섞어서',     ex: '여섯 유형 모두' },
     of:     { t: 'A의 B%',     ex: '340의 15% = 51' },
     ratio:  { t: '몇 %인가',   ex: '51은 340의 15%' },
     change: { t: '증감률',     ex: '250 → 290 = 16%↑' },
     after:  { t: '증감 후 값', ex: '480에서 25%↑ = 600' },
+    base:   { t: '역산',       ex: '15%가 51 → 340' },
+    twice:  { t: '연속 증감',  ex: '+20% → −10% = 108' },
   };
   const KINDS = {
     mult: [['teens', '19단'], ['twoByOne', '두 자리 × 한 자리'], ['twoByTwo', '두 자리 × 두 자리']],
-    pct: [['of', 'A의 B%'], ['ratio', '몇 %인가'], ['change', '증감률'], ['after', '증감 후 값']],
+    pct: [['of', 'A의 B%'], ['ratio', '몇 %인가'], ['change', '증감률'], ['after', '증감 후 값'], ['base', '역산'], ['twice', '연속 증감']],
   };
 
   const defaults = () => ({
@@ -382,8 +384,11 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       case 'of': return delta(p);
       case 'ratio': case 'change': return p.B;
       case 'after': return p.A + p.dir * delta(p);
+      case 'base': return p.A;
+      case 'twice': return (100 + p.A) * (100 + p.B) / 100;
     }
   }
+  const signed = x => `${x > 0 ? '+' : '−'}${Math.abs(x)}%`;
   const unit = p => (p.t === 'ratio' || p.t === 'change') ? '%' : '';
   const up = p => p.dir > 0 ? '증가' : '감소';
 
@@ -395,6 +400,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       case 'ratio': return { main: `${delta(p)} ÷ ${p.A}`, sub: `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %?` };
       case 'change': return { main: `${p.A} → ${answer({ ...p, t: 'after' })}`, sub: `${up(p)}율은 몇 %?` };
       case 'after': return { main: `${p.A} ${p.dir > 0 ? '+' : '−'}${p.B}%`, sub: `${p.A}에서 ${p.B}% ${up(p)}하면?` };
+      case 'base': return { main: `? × ${p.B}% = ${delta(p)}`, sub: `${p.B}%가 ${delta(p)}인 수는?` };
+      case 'twice': return { main: `${signed(p.A)} → ${signed(p.B)}`, sub: '처음을 100이라 하면 결과는?' };
     }
   }
   // 숫자 뒤 은/는: 끝자리 2·4·5·9(이·사·오·구)만 받침이 없다
@@ -406,19 +413,36 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       case 'ratio': return `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %`;
       case 'change': return `${p.A} → ${answer({ ...p, t: 'after' })} ${up(p)}율`;
       case 'after': return `${p.A}에서 ${p.B}% ${up(p)}`;
+      case 'base': return `${p.B}%가 ${delta(p)}인 수`;
+      case 'twice': return `100 → ${signed(p.A)} → ${signed(p.B)}`;
     }
   }
   const answerText = p => `${answer(p)}${unit(p)}`;
 
-  // 정수로 떨어지는 퍼센트 문제 만들기
+  // 정수로 떨어지는 퍼센트 문제 만들기.
+  // A는 두 자리~네 자리까지 고루, B는 5의 배수 반·아무 수 반으로 섞어 겹치지 않게 한다.
+  const ALL_PCT = ['of', 'ratio', 'change', 'after', 'base', 'twice'];
+  function pickA(m) {
+    const r = Math.random();
+    const [lo, hi] = r < 0.15 ? [20, 99] : r < 0.65 ? [100, 999] : [1000, 9990];
+    const kLo = Math.ceil(lo / m), kHi = Math.floor(hi / m);
+    return kLo <= kHi ? m * rnd(kLo, kHi) : m * rnd(Math.ceil(100 / m), Math.floor(9990 / m));
+  }
   function genPct(type) {
-    const t = type === 'mix' ? ['of', 'ratio', 'change', 'after'][rnd(0, 3)] : type;
+    const t = type === 'mix' ? ALL_PCT[rnd(0, ALL_PCT.length - 1)] : type;
+    if (t === 'twice') {
+      // 10의 배수끼리면 (100+a)(100+b)/100 이 정수
+      const a = 10 * rnd(1, 5) * (Math.random() < 0.5 ? 1 : -1);
+      const b = 5 * rnd(1, 10) * (Math.random() < 0.5 ? 1 : -1);
+      const a2 = Math.abs(b) % 10 ? 20 * rnd(1, 2) * Math.sign(a) : a;   // b가 5의 홀수배면 a는 20의 배수
+      if ((100 + a2) * (100 + b) === 10000) return genPct(t);   // 결과가 그대로 100이면 다시
+      return { t, A: a2, B: b, dir: 1 };
+    }
     const dir = (t === 'change' || t === 'after') && Math.random() < 0.4 ? -1 : 1;
     const maxB = dir < 0 ? 60 : 95;
-    const B = Math.random() < 0.6 ? 5 * rnd(1, maxB / 5) : rnd(1, maxB);
+    const B = Math.random() < 0.5 ? 5 * rnd(1, maxB / 5) : rnd(1, maxB);
     const m = 100 / gcd(B, 100);              // A가 m의 배수면 A×B/100이 정수
-    const A = m * rnd(Math.ceil(20 / m), Math.floor(990 / m));
-    return { t, A, B, dir };
+    return { t, A: pickA(m), B, dir };
   }
 
   // ---------- 기록 ----------
@@ -448,30 +472,49 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   }
 
   // pool: { list } | { a, b } (곱셈 범위) | { pct: type }
+  // 한 번 푼 세션 안에서는 같은 문제를 다시 내지 않는다. 문제 수가 적은 범위(19단 등)는
+  // 전부 섞어 놓고 하나씩 뽑고, 다 쓰면 다시 섞는다.
+  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = rnd(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
   function makePicker(pool) {
-    let last = null;
-    const weight = p => { const r = S.records[pid(p)]; return r ? Math.min(6, 1 + weakness(r)) : 1.5; };
+    const seen = new Set();
+    let bag = [], weakUsed = 0;
     const fits = x => pool.pct ? (x.t !== 'm' && (pool.pct === 'mix' || x.t === pool.pct))
                                : (x.t === 'm' && inR(x.a, pool.a) && inR(x.b, pool.b));
-    const fresh = () => pool.pct ? genPct(pool.pct) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
+    const size = pool.a ? (pool.a[1] - pool.a[0] + 1) * (pool.b[1] - pool.b[0] + 1) : Infinity;
+    const all = () => {
+      const out = [];
+      for (let a = pool.a[0]; a <= pool.a[1]; a++) for (let b = pool.b[0]; b <= pool.b[1]; b++) out.push({ t: 'm', a, b });
+      return out;
+    };
+    const fromBag = make => {
+      if (!bag.length) { bag = shuffle(make().filter(x => !seen.has(pid(x)))); if (!bag.length) { seen.clear(); bag = shuffle(make()); } }
+      return bag.pop();
+    };
+    const fresh = () => {
+      if (size <= 400) return fromBag(all);
+      for (let i = 0; i < 50; i++) {
+        const p = pool.pct ? genPct(pool.pct) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
+        if (!seen.has(pid(p))) return p;
+      }
+      return pool.pct ? genPct(pool.pct) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
+    };
     return {
       next() {
         let p;
         if (pool.list) {
-          const cand = pool.list.length > 1 ? pool.list.filter(x => pid(x) !== last) : pool.list;
-          const ws = cand.map(weight);
-          let r = Math.random() * ws.reduce((s, w) => s + w, 0);
-          p = cand[cand.length - 1];
-          for (let i = 0; i < cand.length; i++) { r -= ws[i]; if (r < 0) { p = cand[i]; break; } }
+          p = fromBag(() => pool.list);   // 오답 복습: 약한 문제를 한 번씩
         } else {
-          const weak = weakList().filter(x => fits(x) && pid(x) !== last);
-          if (weak.length && Math.random() < 0.3) {
-            p = weak[Math.floor(Math.random() * weak.length)];
+          // 약한 문제는 가끔(15%), 세션당 최대 5개, 이번 세션에 안 나온 것만
+          const weak = weakUsed < 5 ? weakList().filter(x => fits(x) && !seen.has(pid(x))) : [];
+          if (weak.length && Math.random() < 0.15) {
+            p = weak[rnd(0, Math.min(weak.length, 10) - 1)];
+            weakUsed++;
+            bag = bag.filter(x => pid(x) !== pid(p));
           } else {
-            for (let i = 0; i < 6; i++) { p = fresh(); if (pid(p) !== last) break; }
+            p = fresh();
           }
         }
-        last = pid(p);
+        seen.add(pid(p));
         return p;
       },
     };
@@ -556,6 +599,25 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
         lines = [...chunkLines(p.A, p.B), [up(p), `${p.A} ${p.dir > 0 ? '+' : '−'} ${fmt(d)} = ${fmt(answer(p))}`]];
         tip = `한 번에: ${p.A} × ${fmt(1 + p.dir * p.B / 100)} = ${fmt(answer(p))}`;
         break;
+      case 'base': {
+        const one = d / p.B;
+        lines = [['식', `${fmt(d)} ÷ ${p.B}% = ${fmt(d)} ÷ ${p.B} × 100`], ['1%', `${fmt(d)} ÷ ${p.B} = ${fmt(one)}`], ['100%', `${fmt(one)} × 100 = ${p.A}`]];
+        if (p.B % 10 === 0) lines.splice(1, 0, ['10%', `${fmt(d)} ÷ ${p.B / 10} = ${fmt(d / (p.B / 10))}`]);
+        if (frac) tip = `${p.B}% = ${frac} → ${fmt(d)} ÷ (${frac}) = ${p.A}`;
+        break;
+      }
+      case 'twice': {
+        const mid = 100 + p.A, ans = answer(p), step2 = mid * Math.abs(p.B) / 100;
+        const sg = x => x > 0 ? '+' : '−';
+        lines = [['처음', '100'],
+                 ['1단계', `100 ${sg(p.A)} ${Math.abs(p.A)} = ${mid}`],
+                 ['2단계', `${mid}의 ${Math.abs(p.B)}% = ${fmt(step2)}`],
+                 ['', `${mid} ${sg(p.B)} ${fmt(step2)} = ${fmt(ans)}`],
+                 ['결과', `${fmt(ans)} → 처음보다 ${fmt(Math.abs(ans - 100))}% ${ans >= 100 ? '증가' : '감소'}`]];
+        const pr = x => x < 0 ? `(−${fmt(-x)})` : fmt(x);
+        tip = `그냥 더하면 안 돼요: ${pr(p.A)} + ${pr(p.B)} + ${pr(p.A)}×${pr(p.B)}÷100 = ${ans < 100 ? '−' : '+'}${fmt(Math.abs(ans - 100))}%`;
+        break;
+      }
     }
     return { lines, tip };
   }
@@ -649,7 +711,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     if (mode === 'review') {
       const list = weakList(section);
       if (!list.length) return show('home');
-      pool = { list }; count = Math.min(30, Math.max(10, list.length * 2));
+      pool = { list }; count = Math.min(30, list.length);
     } else {
       pool = section === 'pct' ? { pct: S.pctType } : ranges();
       count = mode === 'ta' ? null : PRACTICE;
