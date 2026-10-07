@@ -1,0 +1,740 @@
+<title>99단 연습장</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+/* Layout: one-screen phone app. Paper ground, teal ink accent, red-pen corrections, graph-paper hand calculation. */
+:root {
+  --paper: #F3F5F4;
+  --surface: #FFFFFF;
+  --surface-2: #E8ECEA;
+  --ink: #17212B;
+  --muted: #5E6B73;
+  --line: #DCE2E0;
+  --grid: #CFDDE3;
+  --accent: #0E6E66;
+  --accent-soft: #D7EBE8;
+  --on-accent: #FFFFFF;
+  --red: #C93C37;
+  --red-soft: #F8E1DF;
+  --green: #1E8A4C;
+  --green-soft: #DDF1E4;
+  --amber: #A86400;
+  --amber-soft: #F6E8D2;
+  --font-body: "IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 16px;
+  --cell: 34px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0F1417; --surface: #182025; --surface-2: #222C32; --ink: #E7EDEA; --muted: #93A1A8;
+    --line: #2A363E; --grid: #263A44; --accent: #3DB8A9; --accent-soft: #163B37; --on-accent: #06201D;
+    --red: #F0716B; --red-soft: #3D1F1E; --green: #4CC37E; --green-soft: #173324; --amber: #F0A93A; --amber-soft: #3A2C14;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0F1417; --surface: #182025; --surface-2: #222C32; --ink: #E7EDEA; --muted: #93A1A8;
+  --line: #2A363E; --grid: #263A44; --accent: #3DB8A9; --accent-soft: #163B37; --on-accent: #06201D;
+  --red: #F0716B; --red-soft: #3D1F1E; --green: #4CC37E; --green-soft: #173324; --amber: #F0A93A; --amber-soft: #3A2C14;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { height: 100%; }
+body {
+  height: 100%; margin: 0; background: var(--paper); color: var(--ink);
+  font: 400 15px/1.5 var(--font-body); -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; touch-action: manipulation; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+.app { height: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px 16px; }
+.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* ---------- headers ---------- */
+.top { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.top h2 { margin: 0; font-size: 17px; font-weight: 700; flex: 1; text-align: center; }
+.top .spacer { width: 44px; }
+.icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); }
+.icon-btn:active { background: var(--surface-2); }
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ---------- home ---------- */
+.brand { display: flex; align-items: baseline; gap: 10px; padding: 8px 0 18px; }
+.brand h1 { margin: 0; font: 600 40px/1 var(--font-num); letter-spacing: -1px; }
+.brand p { margin: 0; color: var(--muted); font-size: 14px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--muted); margin: 20px 0 8px; }
+.levels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.level {
+  text-align: left; padding: 12px 14px; border-radius: 14px; background: var(--surface);
+  border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 2px;
+}
+.level b { font-weight: 600; font-size: 15px; }
+.level span { font: 500 12px var(--font-num); color: var(--muted); }
+.level[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.level[aria-pressed="true"] span { color: var(--accent); }
+.custom { margin-top: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 14px; }
+.crow { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.crow + .crow { border-top: 1px solid var(--line); }
+.crow > span:first-child { width: 40px; font-weight: 600; font-size: 14px; }
+.stepper { display: flex; align-items: center; gap: 2px; }
+.stepper button { width: 34px; height: 34px; border-radius: 10px; background: var(--surface-2); font-size: 18px; font-weight: 600; }
+.stepper output { width: 34px; text-align: center; font: 600 16px var(--font-num); }
+.crow .tilde { color: var(--muted); flex: 1; text-align: center; }
+
+.modes { display: flex; flex-direction: column; gap: 8px; }
+.mode {
+  display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+}
+.mode:active { transform: scale(.985); }
+.mode:disabled { opacity: .45; cursor: default; transform: none; }
+.mode .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+.mode .ico svg { width: 22px; height: 22px; }
+.mode .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mode .txt b { font-size: 16px; font-weight: 600; }
+.mode .txt span { font-size: 13px; color: var(--muted); }
+.mode .chev { color: var(--muted); }
+.ico.teal { background: var(--accent-soft); color: var(--accent); }
+.ico.amber { background: var(--amber-soft); color: var(--amber); }
+.ico.red { background: var(--red-soft); color: var(--red); }
+.links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.link { padding: 14px; border-radius: var(--r); background: var(--surface-2); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.link svg { width: 18px; height: 18px; color: var(--muted); }
+
+/* ---------- quiz ---------- */
+.qbar { display: flex; align-items: center; gap: 8px; }
+.qprog { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.qmeta { display: flex; align-items: center; gap: 12px; font: 600 14px var(--font-num); }
+.qmeta .grow { flex: 1; }
+.qmeta .ok { color: var(--green); }
+.qmeta .fire { color: var(--amber); }
+.qmeta .low { color: var(--red); }
+.bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s linear; }
+.bar.ta span { background: var(--amber); transition: width 1s linear; }
+.qbody { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; padding: 12px 0; }
+.card {
+  width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 24px;
+  padding: 24px 16px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: background-color .15s, border-color .15s; overflow-y: auto; max-height: 100%;
+}
+.card.correct { background: var(--green-soft); border-color: var(--green); }
+.card.wrong { background: var(--red-soft); border-color: var(--red); }
+.prob { font: 600 clamp(40px, 13vw, 60px)/1.1 var(--font-num); letter-spacing: -1px; white-space: nowrap; }
+.ans { font: 600 clamp(38px, 12vw, 54px)/1.15 var(--font-num); color: var(--accent); min-height: 1.15em; }
+.ans.empty { color: var(--muted); opacity: .5; }
+.card.correct .ans { color: var(--green); }
+.card.wrong .ans { color: var(--red); text-decoration: line-through; text-decoration-thickness: 3px; }
+.fb { font-weight: 600; font-size: 17px; min-height: 1.5em; }
+.card.correct .fb { color: var(--green); }
+.card.wrong .fb { color: var(--red); }
+.hint {
+  display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px;
+  background: var(--amber-soft); color: var(--amber); font-weight: 600; font-size: 14px;
+}
+.hint svg { width: 16px; height: 16px; }
+.shake { animation: shake .4s linear; }
+@keyframes shake { 0%,100% { transform: none } 20% { transform: translateX(-9px) } 40% { transform: translateX(8px) } 60% { transform: translateX(-6px) } 80% { transform: translateX(4px) } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } .bar span { transition: none; } }
+
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.key {
+  height: clamp(50px, 8.2vh, 64px); border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--line); font: 600 26px var(--font-num); display: grid; place-items: center;
+  user-select: none; -webkit-user-select: none;
+}
+.key:active { background: var(--surface-2); transform: scale(.96); }
+.key.fn { background: var(--surface-2); border-color: transparent; }
+.key.fn svg { width: 24px; height: 24px; }
+.key.go { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.key.go:disabled { opacity: .4; }
+.big-btn {
+  width: 100%; min-height: 56px; border-radius: 16px; background: var(--accent); color: var(--on-accent);
+  font-weight: 700; font-size: 17px; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.big-btn.ghost { background: var(--surface-2); color: var(--ink); }
+
+/* ---------- hand calculation on graph paper ---------- */
+.hc-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+.hc-title { font: 600 15px var(--font-num); color: var(--muted); }
+.hc { display: flex; gap: 10px; align-items: flex-start; }
+.hc-grid {
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+}
+.hc-row { display: flex; height: var(--cell); }
+.hc-row i {
+  width: var(--cell); height: var(--cell); display: grid; place-items: center; font-style: normal;
+  font: 600 22px var(--font-num);
+}
+.hc-row i.op { color: var(--muted); }
+.hc-row i.dim { color: var(--muted); opacity: .45; }
+.hc-row.ruled { box-shadow: inset 0 -2.5px 0 var(--ink); }
+.hc-row.res i { color: var(--accent); }
+.hc-notes .hc-note { height: var(--cell); display: flex; align-items: center; font: 500 12px var(--font-num); color: var(--muted); white-space: nowrap; }
+.tip { display: flex; flex-direction: column; align-items: center; gap: 2px; font: 500 14px var(--font-num); color: var(--muted); text-align: center; }
+.tip b { font: 600 12px var(--font-body); color: var(--amber); letter-spacing: .06em; }
+
+/* ---------- result ---------- */
+.res-head { text-align: center; padding: 20px 0 8px; }
+.res-head .kicker { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .06em; }
+.res-head h2 { margin: 6px 0 0; font-size: 28px; font-weight: 700; text-wrap: balance; }
+.badge { display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); font-weight: 700; font-size: 14px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 2px; }
+.tile b { font: 600 24px var(--font-num); }
+.tile span { font-size: 13px; color: var(--muted); }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.list-head { padding: 12px 14px 4px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.list-head b { font-weight: 600; }
+.list-head span { font-size: 12px; color: var(--muted); }
+.row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 14px;
+  font: 500 17px var(--font-num); border-top: 1px solid var(--line);
+}
+.list-head + .row { border-top: 0; }
+.row .grow { flex: 1; }
+.row .sub { font-size: 13px; color: var(--muted); }
+.row.weak { color: var(--red); }
+.row svg { width: 16px; height: 16px; color: var(--amber); flex: none; }
+.row:active { background: var(--surface-2); }
+.stack { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+
+/* ---------- table ---------- */
+.picker { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; }
+.picker .n { font: 600 28px var(--font-num); min-width: 3.4em; }
+.picker input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.foot { font-size: 12px; color: var(--muted); text-align: center; margin: 10px 0 4px; }
+
+/* ---------- stats ---------- */
+.kind { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.list-head + .kind { border-top: 0; }
+.kind .line { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.kind .line b { font-weight: 600; }
+.kind .line span { color: var(--muted); font: 500 13px var(--font-num); }
+.meter { display: flex; align-items: center; gap: 10px; }
+.meter .bar { flex: 1; height: 8px; }
+.meter .pct { width: 3em; text-align: right; font: 600 14px var(--font-num); }
+.danger { color: var(--red); font-weight: 600; padding: 14px; width: 100%; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+.confirm { display: flex; gap: 8px; align-items: center; background: var(--red-soft); border-radius: var(--r); padding: 10px 12px; }
+.confirm span { flex: 1; font-weight: 600; color: var(--red); font-size: 14px; }
+.confirm button { padding: 8px 14px; border-radius: 10px; font-weight: 600; }
+.confirm .yes { background: var(--red); color: var(--surface); }
+.confirm .no { background: var(--surface); }
+
+/* ---------- sheet ---------- */
+.sheet { position: fixed; inset: 0; background: rgb(0 0 0 / .35); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+.sheet-panel {
+  width: 100%; max-width: 520px; background: var(--paper); border-radius: 24px 24px 0 0;
+  padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 16px;
+  max-height: 90%; overflow-y: auto;
+}
+.sheet-panel h3 { margin: 0; text-align: center; font: 600 24px var(--font-num); }
+</style>
+
+<div class="app">
+
+  <!-- 홈 -->
+  <section class="view scroll" id="v-home"></section>
+
+  <!-- 문제 -->
+  <section class="view" id="v-quiz" hidden>
+    <div class="qbar">
+      <button class="icon-btn" data-act="home" aria-label="그만하고 처음으로">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="qprog">
+        <div class="qmeta"><span id="q-count"></span><span class="grow"></span><span class="fire" id="q-streak"></span><span class="ok" id="q-correct"></span></div>
+        <div class="bar" id="q-barwrap"><span id="q-bar"></span></div>
+      </div>
+    </div>
+    <div class="qbody">
+      <div class="card" id="q-card">
+        <div class="prob" id="q-prob"></div>
+        <div class="ans" id="q-ans"></div>
+        <div class="fb" id="q-fb"></div>
+        <div class="hc-wrap" id="q-hc" hidden></div>
+      </div>
+      <button class="hint" id="q-hint" data-act="reveal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z"/></svg>
+        풀이 보기
+      </button>
+    </div>
+    <div class="keypad" id="q-keys">
+      <button class="key" data-key="1">1</button><button class="key" data-key="2">2</button><button class="key" data-key="3">3</button>
+      <button class="key" data-key="4">4</button><button class="key" data-key="5">5</button><button class="key" data-key="6">6</button>
+      <button class="key" data-key="7">7</button><button class="key" data-key="8">8</button><button class="key" data-key="9">9</button>
+      <button class="key fn" data-key="del" aria-label="지우기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M17 9l-6 6M11 9l6 6"/></svg>
+      </button>
+      <button class="key" data-key="0">0</button>
+      <button class="key go" data-key="ok" id="q-ok" aria-label="확인">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+      </button>
+    </div>
+    <button class="big-btn" id="q-next" data-act="next" hidden>다음 문제 →</button>
+  </section>
+
+  <!-- 결과 / 곱셈표 / 기록 -->
+  <section class="view scroll" id="v-result" hidden></section>
+  <section class="view scroll" id="v-table" hidden></section>
+  <section class="view scroll" id="v-stats" hidden></section>
+</div>
+
+<div class="sheet" id="sheet" hidden data-act="close-sheet">
+  <div class="sheet-panel" id="sheet-panel"></div>
+</div>
+
+<script>
+(() => {
+  // ---------- 저장 ----------
+  const KEY = 'gsat99.v1';
+  const PRACTICE = 20, TA_SECONDS = 120;
+  const LEVELS = {
+    teens:    { t: '19단',            a: [11, 19], b: [11, 19] },
+    twoByOne: { t: '두 자리 × 한 자리', a: [11, 99], b: [2, 9] },
+    twoByTwo: { t: '두 자리 × 두 자리', a: [11, 99], b: [11, 99] },
+    custom:   { t: '직접 설정' },
+  };
+  const KINDS = [['teens', '19단'], ['twoByOne', '두 자리 × 한 자리'], ['twoByTwo', '두 자리 × 두 자리']];
+
+  const defaults = () => ({ records: {}, best: 0, level: 'twoByTwo', custom: { aMin: 11, aMax: 99, bMin: 11, bMax: 19 }, tableN: 11 });
+  let S = defaults();
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const d = JSON.parse(raw); S = { ...defaults(), ...d, custom: { ...defaults().custom, ...(d.custom || {}) } }; }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  // ---------- 문제/기록 ----------
+  const pid = p => `${p.a}x${p.b}`;
+  const parse = id => { const [a, b] = id.split('x').map(Number); return { a, b }; };
+  const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+  const inR = (v, r) => v >= r[0] && v <= r[1];
+  const weakness = r => r.w * 2 / (r.c + 1);
+  const isWeak = p => { const r = S.records[pid(p)]; return !!r && r.w > 0 && weakness(r) >= 0.5; };
+  const weakList = () => Object.entries(S.records)
+    .filter(([, r]) => r.w > 0 && weakness(r) >= 0.5)
+    .sort((x, y) => weakness(y[1]) - weakness(x[1]) || x[0].localeCompare(y[0]))
+    .map(([k]) => parse(k));
+  const kindOf = p => (inR(p.a, [11, 19]) && inR(p.b, [11, 19])) ? 'teens' : (p.a < 10 || p.b < 10) ? 'twoByOne' : 'twoByTwo';
+
+  function record(p, ok, secs) {
+    const r = S.records[pid(p)] || (S.records[pid(p)] = { c: 0, w: 0, t: 0 });
+    if (ok) { r.c++; r.t += secs; } else { r.w++; }
+    save();
+  }
+
+  function ranges() {
+    const L = LEVELS[S.level];
+    if (L.a) return { a: L.a, b: L.b };
+    const c = S.custom;
+    return {
+      a: [Math.max(11, Math.min(c.aMin, c.aMax)), Math.max(11, c.aMin, c.aMax)],
+      b: [Math.min(c.bMin, c.bMax), Math.max(c.bMin, c.bMax)],
+    };
+  }
+
+  function makePicker(pool) {
+    let last = null;
+    const weight = p => { const r = S.records[pid(p)]; return r ? Math.min(6, 1 + weakness(r)) : 1.5; };
+    return {
+      next() {
+        let p;
+        if (pool.list) {
+          const cand = pool.list.length > 1 ? pool.list.filter(x => pid(x) !== last) : pool.list;
+          const ws = cand.map(weight);
+          let r = Math.random() * ws.reduce((s, w) => s + w, 0);
+          p = cand[cand.length - 1];
+          for (let i = 0; i < cand.length; i++) { r -= ws[i]; if (r < 0) { p = cand[i]; break; } }
+        } else {
+          const weak = weakList().filter(x => inR(x.a, pool.a) && inR(x.b, pool.b) && pid(x) !== last);
+          if (weak.length && Math.random() < 0.3) {
+            p = weak[Math.floor(Math.random() * weak.length)];
+          } else {
+            for (let i = 0; i < 6; i++) { p = { a: rnd(...pool.a), b: rnd(...pool.b) }; if (pid(p) !== last) break; }
+          }
+        }
+        last = pid(p);
+        return p;
+      },
+    };
+  }
+
+  // ---------- 손계산(세로셈) ----------
+  function handCalc(p) {
+    const top = Math.max(p.a, p.b), bot = Math.min(p.a, p.b);
+    const parts = String(bot).split('').reverse().map(Number).map((d, i) => ({ d, i })).filter(x => x.d);
+    const rows = [{ pre: '', s: String(top), sh: 0 }, { pre: '×', s: String(bot), sh: 0, ruled: true }];
+    if (parts.length <= 1) {
+      rows.push({ pre: '', s: String(top * bot), sh: 0, res: true });
+    } else {
+      parts.forEach((x, k) => rows.push({ pre: '', s: String(top * x.d), sh: x.i, note: `${top}×${x.d * 10 ** x.i}`, ruled: k === parts.length - 1 }));
+      rows.push({ pre: '', s: String(top * bot), sh: 0, res: true });
+    }
+    const width = Math.max(...rows.map(r => r.s.length + r.sh));
+    let mental = null;
+    if (parts.length > 1) {
+      const terms = parts.slice().reverse().map(x => [x.d * 10 ** x.i, top * x.d * 10 ** x.i]);
+      mental = [`${top}×${terms.map(t => t[0]).join(` + ${top}×`)}`, `= ${terms.map(t => t[1]).join(' + ')} = ${top * bot}`];
+    } else if (top >= 10 && bot > 1 && top % 10) {
+      const t = Math.floor(top / 10) * 10, o = top % 10;
+      mental = [`${t}×${bot} + ${o}×${bot}`, `= ${t * bot} + ${o * bot} = ${top * bot}`];
+    }
+    return { rows, width, mental };
+  }
+
+  function hcHTML(p) {
+    const h = handCalc(p);
+    const grid = h.rows.map(r => {
+      const cells = [`<i class="op">${r.pre}</i>`, '<i></i>'];
+      for (let k = 0; k < h.width - r.s.length - r.sh; k++) cells.push('<i></i>');
+      for (const ch of r.s) cells.push(`<i>${ch}</i>`);
+      for (let k = 0; k < r.sh; k++) cells.push('<i class="dim">0</i>');
+      return `<div class="hc-row${r.ruled ? ' ruled' : ''}${r.res ? ' res' : ''}">${cells.join('')}</div>`;
+    }).join('');
+    const notes = h.rows.map(r => `<div class="hc-note">${r.note || ''}</div>`).join('');
+    const tip = h.mental ? `<div class="tip"><b>암산 팁</b><span>${h.mental[0]}</span><span>${h.mental[1]}</span></div>` : '';
+    return `<div class="hc" aria-label="${p.a} 곱하기 ${p.b} 세로셈"><div class="hc-grid">${grid}</div><div class="hc-notes">${notes}</div></div>${tip}`;
+  }
+
+  // ---------- 아이콘 ----------
+  const I = {
+    pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+    timer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6L4 8.7"/><path d="M4 4v4.7h4.7"/></svg>',
+    table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9.5h17M3.5 15h17M9.5 3.5v17"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z"/></svg>',
+  };
+  const topBar = title => `<div class="top"><button class="icon-btn" data-act="home" aria-label="처음으로">${I.back}</button><h2>${title}</h2><span class="spacer"></span></div>`;
+
+  // ---------- 화면 전환 ----------
+  const $ = id => document.getElementById(id);
+  const views = ['home', 'quiz', 'result', 'table', 'stats'];
+  let current = 'home';
+  function show(v) {
+    current = v;
+    for (const n of views) $('v-' + n).hidden = n !== v;
+    if (v === 'home') renderHome();
+    if (v === 'table') renderTable();
+    if (v === 'stats') renderStats();
+    $('v-' + v).scrollTop = 0;
+  }
+
+  // ---------- 홈 ----------
+  function renderHome() {
+    const r = ranges();
+    const weakN = weakList().length;
+    const levelBtns = Object.entries(LEVELS).map(([k, L]) => {
+      const rr = L.a ? L : r;
+      return `<button class="level" data-act="level" data-v="${k}" aria-pressed="${S.level === k}"><b>${L.t}</b><span>${rr.a[0]}~${rr.a[1]} × ${rr.b[0]}~${rr.b[1]}</span></button>`;
+    }).join('');
+    const c = S.custom;
+    const step = (key, val) => `<span class="stepper"><button data-act="step" data-k="${key}" data-d="-1" aria-label="줄이기">−</button><output>${val}</output><button data-act="step" data-k="${key}" data-d="1" aria-label="늘리기">+</button></span>`;
+    const custom = S.level !== 'custom' ? '' : `
+      <div class="custom">
+        <div class="crow"><span>앞 수</span>${step('aMin', c.aMin)}<span class="tilde">~</span>${step('aMax', c.aMax)}</div>
+        <div class="crow"><span>뒤 수</span>${step('bMin', c.bMin)}<span class="tilde">~</span>${step('bMax', c.bMax)}</div>
+      </div>`;
+    $('v-home').innerHTML = `
+      <div class="brand"><h1>99단</h1><p>GSAT 수리 곱셈 연습장</p></div>
+      <div class="label">범위</div>
+      <div class="levels">${levelBtns}</div>
+      ${custom}
+      <div class="label">연습</div>
+      <div class="modes">
+        <button class="mode" data-act="start" data-mode="practice"><span class="ico teal">${I.pencil}</span><span class="txt"><b>연습하기</b><span>${PRACTICE}문제 · 모르면 풀이 보기</span></span><span class="chev">${I.chev}</span></button>
+        <button class="mode" data-act="start" data-mode="ta"><span class="ico amber">${I.timer}</span><span class="txt"><b>타임어택</b><span>${TA_SECONDS / 60}분 도전 · 최고 기록 ${S.best}개</span></span><span class="chev">${I.chev}</span></button>
+        <button class="mode" data-act="start" data-mode="review" ${weakN ? '' : 'disabled'}><span class="ico red">${I.redo}</span><span class="txt"><b>오답 집중</b><span>${weakN ? `틀리거나 풀이 본 문제 ${weakN}개 복습` : '아직 약한 문제가 없어요'}</span></span><span class="chev">${I.chev}</span></button>
+      </div>
+      <div class="links">
+        <button class="link" data-act="go" data-v="table">${I.table}곱셈표</button>
+        <button class="link" data-act="go" data-v="stats">${I.chart}내 기록</button>
+      </div>`;
+  }
+
+  // ---------- 문제 ----------
+  let Q = null, timerId = null, advanceId = null;
+
+  function startQuiz(mode) {
+    stopTimers();
+    let pool, count;
+    if (mode === 'review') {
+      const list = weakList();
+      if (!list.length) return show('home');
+      pool = { list }; count = Math.min(30, Math.max(10, list.length * 2));
+    } else {
+      pool = ranges(); count = mode === 'ta' ? null : PRACTICE;
+    }
+    const picker = makePicker(pool);
+    Q = { mode, picker, count, answered: 0, correct: 0, ctime: 0, streak: 0, mistakes: [], remaining: TA_SECONDS,
+          started: Date.now(), qStart: Date.now(), cur: picker.next(), input: '', fb: 'none', step: 0, newRecord: false };
+    show('quiz');
+    $('q-barwrap').classList.toggle('ta', mode === 'ta');
+    if (mode === 'ta') timerId = setInterval(tick, 1000);
+    renderQuiz();
+  }
+
+  function stopTimers() {
+    clearInterval(timerId); timerId = null;
+    clearTimeout(advanceId); advanceId = null;
+  }
+
+  function renderQuiz() {
+    const p = Q.cur;
+    if (Q.count) {
+      $('q-count').textContent = `${Math.min(Q.answered + (Q.fb === 'none' ? 1 : 0), Q.count)} / ${Q.count}`;
+      $('q-count').className = '';
+      $('q-bar').style.width = (Q.answered / Q.count * 100) + '%';
+    } else {
+      const m = Math.floor(Q.remaining / 60), s = String(Q.remaining % 60).padStart(2, '0');
+      $('q-count').textContent = `${m}:${s}`;
+      $('q-count').className = Q.remaining <= 10 ? 'low' : '';
+      $('q-bar').style.width = (Q.remaining / TA_SECONDS * 100) + '%';
+    }
+    $('q-streak').textContent = Q.streak >= 3 ? `${Q.streak}연속` : '';
+    $('q-correct').textContent = `✓ ${Q.correct}`;
+
+    const revealed = Q.fb === 'revealed';
+    const card = $('q-card');
+    card.className = 'card' + (Q.fb === 'correct' ? ' correct' : Q.fb === 'wrong' ? ' wrong' : '');
+    $('q-prob').hidden = revealed;
+    $('q-ans').hidden = revealed;
+    $('q-fb').hidden = revealed;
+    $('q-hc').hidden = !revealed;
+    $('q-prob').textContent = `${p.a} × ${p.b}`;
+    $('q-ans').textContent = Q.input || '?';
+    $('q-ans').className = 'ans' + (Q.input ? '' : ' empty');
+    $('q-fb').textContent = Q.fb === 'correct' ? '정답!' : Q.fb === 'wrong' ? `정답은 ${p.a * p.b}` : '';
+    if (revealed) $('q-hc').innerHTML = `<div class="hc-title">${p.a} × ${p.b} = ${p.a * p.b}</div>${hcHTML(p)}`;
+
+    $('q-hint').hidden = !(Q.fb === 'none' || Q.fb === 'wrong');
+    $('q-keys').hidden = revealed;
+    $('q-next').hidden = !revealed;
+    $('q-ok').disabled = !(Q.input && Q.fb === 'none');
+  }
+
+  function typeDigit(d) {
+    if (Q.fb !== 'none' || Q.input.length >= 4) return;
+    if (!Q.input && d === '0') return;
+    Q.input += d; renderQuiz();
+  }
+  function del() {
+    if (Q.fb !== 'none' || !Q.input) return;
+    Q.input = Q.input.slice(0, -1); renderQuiz();
+  }
+
+  function submit() {
+    if (!Q.input || Q.fb !== 'none') return;
+    const p = Q.cur, ok = Number(Q.input) === p.a * p.b;
+    const secs = (Date.now() - Q.qStart) / 1000;
+    record(p, ok, secs);
+    Q.answered++;
+    if (ok) {
+      Q.correct++; Q.ctime += secs; Q.streak++; Q.fb = 'correct';
+    } else {
+      Q.streak = 0; Q.mistakes.push(p); Q.fb = 'wrong';
+    }
+    renderQuiz();
+    if (!ok) { const card = $('q-card'); void card.offsetWidth; card.classList.add('shake'); }
+    const step = ++Q.step;
+    advanceId = setTimeout(() => { if (Q && Q.step === step) advance(); }, ok ? 400 : 1600);
+  }
+
+  // 풀이 보기: 아직 답을 안 냈으면 틀린 것으로 기록
+  function reveal() {
+    if (!(Q.fb === 'none' || Q.fb === 'wrong')) return;
+    if (Q.fb === 'none') {
+      record(Q.cur, false, 0);
+      Q.answered++; Q.streak = 0; Q.mistakes.push(Q.cur);
+    }
+    Q.step++; clearTimeout(advanceId);
+    Q.input = ''; Q.fb = 'revealed';
+    renderQuiz();
+  }
+
+  function advance() {
+    Q.step++;
+    Q.input = ''; Q.fb = 'none';
+    if (Q.count && Q.answered >= Q.count) return finish();
+    Q.cur = Q.picker.next(); Q.qStart = Date.now();
+    renderQuiz();
+  }
+
+  function tick() {
+    if (!Q || current !== 'quiz') return;
+    Q.remaining--;
+    if (Q.remaining <= 0) return finish();
+    renderQuiz();
+  }
+
+  function finish() {
+    stopTimers();
+    Q.ended = Date.now();
+    if (Q.mode === 'ta' && Q.correct > S.best) { S.best = Q.correct; Q.newRecord = true; save(); }
+    renderResult();
+    show('result');
+  }
+
+  // ---------- 결과 ----------
+  function renderResult() {
+    const acc = Q.answered ? Math.round(Q.correct / Q.answered * 100) : 0;
+    const avg = Q.correct ? (Q.ctime / Q.correct).toFixed(1) + '초' : '-';
+    const secs = Math.round((Q.ended - Q.started) / 1000);
+    const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`;
+    const seen = new Set();
+    const uniq = Q.mistakes.filter(p => !seen.has(pid(p)) && seen.add(pid(p)));
+    const title = Q.mode === 'ta' ? `${Q.correct}개 맞혔어요` : `${Q.answered}문제 중 ${Q.correct}개 정답`;
+    const kicker = { practice: '연습 끝', ta: '타임어택 끝', review: '오답 복습 끝' }[Q.mode];
+    $('v-result').innerHTML = `
+      <div class="res-head"><div class="kicker">${kicker}</div><h2>${title}</h2>${Q.newRecord ? '<span class="badge">신기록</span>' : ''}</div>
+      <div class="tiles">
+        <div class="tile"><b>${acc}%</b><span>정답률</span></div>
+        <div class="tile"><b>${avg}</b><span>평균 풀이 시간</span></div>
+        <div class="tile"><b>${Q.mode === 'ta' ? S.best + '개' : elapsed}</b><span>${Q.mode === 'ta' ? '최고 기록' : '걸린 시간'}</span></div>
+        <div class="tile"><b>${Q.mistakes.length}</b><span>틀리거나 풀이 본 문제</span></div>
+      </div>
+      ${uniq.length ? `<div class="list" style="margin-top:16px"><div class="list-head"><b>다시 보기</b><span>눌러서 손계산 풀이</span></div>
+        ${uniq.map(p => `<button class="row weak" data-act="calc" data-id="${pid(p)}"><span class="grow">${p.a} × ${p.b}</span><b>${p.a * p.b}</b>${I.bulb}</button>`).join('')}</div>` : ''}
+      <div class="stack">
+        <button class="big-btn" data-act="retry">다시 하기</button>
+        <button class="big-btn ghost" data-act="home">처음으로</button>
+      </div>`;
+  }
+
+  // ---------- 곱셈표 ----------
+  function renderTable() {
+    const n = S.tableN;
+    $('v-table').innerHTML = `${topBar('곱셈표')}
+      <div class="picker" style="margin-top:8px">
+        <span class="stepper"><button data-act="tstep" data-d="-1" aria-label="이전 단">−</button></span>
+        <span class="n" id="t-n"></span>
+        <input type="range" id="t-range" min="11" max="99" step="1" value="${n}" aria-label="단 고르기">
+        <span class="stepper"><button data-act="tstep" data-d="1" aria-label="다음 단">+</button></span>
+      </div>
+      <div class="list" id="t-rows" style="margin-top:10px"></div>
+      <div class="foot">눌러서 손계산 풀이 보기 · 빨간색은 자주 틀리는 문제</div>`;
+    updateTable();
+  }
+
+  function updateTable() {
+    const n = S.tableN;
+    $('t-n').textContent = `${n}단`;
+    $('t-range').value = n;
+    $('t-rows').innerHTML = Array.from({ length: 19 }, (_, i) => {
+      const p = { a: n, b: i + 1 };
+      return `<button class="row${isWeak(p) ? ' weak' : ''}" data-act="calc" data-id="${pid(p)}"><span class="grow">${n} × ${i + 1}</span><b>${n * (i + 1)}</b></button>`;
+    }).join('');
+  }
+
+  // ---------- 기록 ----------
+  let confirmReset = false;
+  function renderStats() {
+    const recs = Object.values(S.records);
+    const total = recs.reduce((s, r) => s + r.c + r.w, 0);
+    const correct = recs.reduce((s, r) => s + r.c, 0);
+    const kinds = KINDS.map(([k, t]) => {
+      let n = 0, c = 0, time = 0;
+      for (const [id, r] of Object.entries(S.records)) if (kindOf(parse(id)) === k) { n += r.c + r.w; c += r.c; time += r.t; }
+      const acc = n ? Math.round(c / n * 100) : null;
+      const color = acc === null ? '' : acc >= 90 ? 'var(--green)' : acc >= 70 ? 'var(--amber)' : 'var(--red)';
+      return `<div class="kind"><div class="line"><b>${t}</b><span>${c ? `평균 ${(time / c).toFixed(1)}초 · ${n}문제` : ''}</span></div>
+        ${acc === null ? '<div class="line"><span>아직 기록 없음</span></div>' :
+          `<div class="meter"><div class="bar"><span style="width:${acc}%;background:${color}"></span></div><span class="pct">${acc}%</span></div>`}</div>`;
+    }).join('');
+    const weak = weakList().slice(0, 10).map(p => {
+      const r = S.records[pid(p)];
+      return `<button class="row" data-act="calc" data-id="${pid(p)}"><span class="grow">${p.a} × ${p.b} = ${p.a * p.b}</span><span class="sub">✗${r.w} ✓${r.c}</span>${I.bulb}</button>`;
+    }).join('');
+    $('v-stats').innerHTML = `${topBar('내 기록')}
+      <div class="tiles">
+        <div class="tile"><b>${total}</b><span>푼 문제</span></div>
+        <div class="tile"><b>${total ? Math.round(correct / total * 100) + '%' : '-'}</b><span>전체 정답률</span></div>
+      </div>
+      <div class="list" style="margin-top:12px"><div class="list-head"><b>유형별</b><span>타임어택 최고 ${S.best}개</span></div>${kinds}</div>
+      <div class="list" style="margin-top:12px"><div class="list-head"><b>자주 틀리는 문제</b><span>눌러서 풀이</span></div>
+        ${weak || '<div class="row" style="border-top:0;color:var(--muted);font-family:var(--font-body)">아직 없어요</div>'}</div>
+      <div style="margin-top:12px">${confirmReset
+        ? '<div class="confirm"><span>모든 기록을 지울까요?</span><button class="no" data-act="reset-no">취소</button><button class="yes" data-act="reset-yes">지우기</button></div>'
+        : '<button class="danger" data-act="reset">기록 초기화</button>'}</div>`;
+  }
+
+  // ---------- 풀이 시트 ----------
+  function openCalc(id) {
+    const p = parse(id);
+    $('sheet-panel').innerHTML = `<h3>${p.a} × ${p.b} = ${p.a * p.b}</h3><div class="hc-wrap">${hcHTML(p)}</div><button class="big-btn ghost" data-act="close-sheet">닫기</button>`;
+    $('sheet').hidden = false;
+  }
+
+  // ---------- 입력 ----------
+  document.addEventListener('click', e => {
+    const keyEl = e.target.closest('[data-key]');
+    if (keyEl && Q && current === 'quiz') {
+      const k = keyEl.dataset.key;
+      if (k === 'del') del(); else if (k === 'ok') submit(); else typeDigit(k);
+      return;
+    }
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    if (el.id === 'sheet' && e.target !== el) return;   // 시트 안쪽 클릭은 무시
+    const act = el.dataset.act;
+    switch (act) {
+      case 'level': S.level = el.dataset.v; save(); renderHome(); break;
+      case 'step': {
+        const k = el.dataset.k, lo = k[0] === 'a' ? 11 : 2;
+        S.custom[k] = Math.min(99, Math.max(lo, S.custom[k] + Number(el.dataset.d)));
+        save(); renderHome(); break;
+      }
+      case 'start': startQuiz(el.dataset.mode); break;
+      case 'retry': startQuiz(Q.mode); break;
+      case 'home': stopTimers(); confirmReset = false; show('home'); break;
+      case 'go': show(el.dataset.v); break;
+      case 'reveal': reveal(); break;
+      case 'next': advance(); break;
+      case 'calc': openCalc(el.dataset.id); break;
+      case 'close-sheet': $('sheet').hidden = true; break;
+      case 'tstep': S.tableN = Math.min(99, Math.max(11, S.tableN + Number(el.dataset.d))); save(); updateTable(); break;
+      case 'reset': confirmReset = true; renderStats(); break;
+      case 'reset-no': confirmReset = false; renderStats(); break;
+      case 'reset-yes': S = { ...defaults(), level: S.level, custom: S.custom, tableN: S.tableN }; save(); confirmReset = false; renderStats(); break;
+    }
+  });
+
+  document.addEventListener('input', e => {
+    if (e.target.id === 't-range') {
+      S.tableN = Number(e.target.value); save();
+      updateTable();
+    }
+  });
+
+  // 키보드(아이패드/PC)
+  document.addEventListener('keydown', e => {
+    if (!$('sheet').hidden && e.key === 'Escape') { $('sheet').hidden = true; return; }
+    if (current !== 'quiz' || !Q) return;
+    if (/^[0-9]$/.test(e.key)) typeDigit(e.key);
+    else if (e.key === 'Backspace') del();
+    else if (e.key === 'Enter') { Q.fb === 'revealed' ? advance() : submit(); }
+    else if (e.key === 'h' || e.key === '?') reveal();
+    else return;
+    e.preventDefault();
+  });
+
+  show('home');
+
+  if ('serviceWorker' in navigator && /github\.io$/.test(location.hostname)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>

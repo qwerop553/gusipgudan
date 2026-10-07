@@ -13,7 +13,20 @@ GSAT 수리 대비용 두 자리 곱셈 연습 iOS 앱 (SwiftUI, iOS 17+)
 - **곱셈표** — 11~99단 × 1~19, 눌러서 풀이 보기
 - **내 기록** — 유형별 정답률과 평균 풀이 시간, 자주 틀리는 문제 TOP 10
 
-## 내 아이폰에 설치하기 (무료)
+## 웹앱으로 쓰기 (Mac 필요 없음, 추천)
+
+같은 기능을 웹앱으로도 만들어 뒀어요 (`docs/`). GitHub Pages로 켜면 아이폰 홈 화면에 앱처럼 설치할 수 있어요.
+
+1. GitHub 저장소 → **Settings → Pages**
+2. **Source: Deploy from a branch**, **Branch: `main` / `/docs`** 선택 → Save
+3. 1~2분 뒤 `https://qwerop553.github.io/gusipgudan/` 열림
+4. 아이폰 **Safari**로 열기 → 공유 버튼 → **홈 화면에 추가**
+
+한 번 열고 나면 오프라인에서도 돼요. 기록은 그 폰의 Safari에 저장돼요.
+
+웹앱을 수정할 때는 `web/app.html`을 고친 뒤 `python3 web/build.py`로 `docs/`를 다시 만들어요.
+
+## iOS 네이티브 앱으로 설치하기 (Mac 필요)
 
 1. Mac에서 `Gugudan.xcodeproj`를 Xcode 16 이상으로 열기
 2. 왼쪽에서 **Gugudan** 프로젝트 → **Signing & Capabilities** → **Team**에 내 Apple ID(Personal Team) 선택
