@@ -243,7 +243,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .st { display: contents; }
 .st > span { padding: 8px 6px; border-bottom: 1px solid var(--grid); }
 .st .k { font: 600 13px var(--font-body); color: var(--muted); white-space: nowrap; padding-right: 14px; }
-.st .v { font: 500 16px var(--font-num); overflow-wrap: anywhere; }
+.st .v { font: 500 16px var(--font-num); word-break: keep-all; overflow-wrap: break-word; }
 .st.res .v { color: var(--accent); font-weight: 600; }
 
 /* ---------- choice buttons (compare problems) ---------- */
@@ -842,7 +842,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     $('q-ans').textContent = (Q.input || '?') + (Q.input ? unit(p) : '');
     $('q-ans').className = 'ans' + (Q.input ? '' : ' empty');
     const v = Number(Q.input);
-    $('q-fb').textContent = Q.fb === 'correct' ? (v === answer(p) ? '정답!' : `정답! (정확히는 ${answerText(p)})`)
+    $('q-fb').textContent = Q.fb === 'correct' ? (v === answer(p) ? '정답!' : `정답! (${calcTitle(p)})`)
                           : Q.fb === 'wrong' ? `정답은 ${answerText(p)}` : '';
     if (revealed) $('q-hc').innerHTML = `<div class="hc-title">${calcTitle(p)}</div>${hintHTML(p)}`;
 
