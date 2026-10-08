@@ -567,6 +567,1113 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   };
 
   // ---------- 확장 유형 (여기 아래에 추가) ----------
+  // ===== 곱셈 암산 요령 =====
+    // ---------- 곱셈 암산 요령 (multTips 확장) ----------
+    // 문제에 정말 들어맞는 요령만 골라 쉬운 것부터 최대 2개. 팁의 모든 식은 그대로 계산해도 참이다.
+    const mt_W = 34;                                                     // 팁 한 줄 최대 글자 수
+    const mt_ZERO = ['', '0을', '0을 두 개', '0을 세 개'];
+    const mt_zeros = n => { let z = 0; while (n && n % 10 === 0) { n /= 10; z++; } return z; };   // 끝의 0 개수
+    const mt_core = n => n / 10 ** mt_zeros(n);                          // 끝의 0을 뗀 수
+    const mt_nz = n => String(n).replace(/0/g, '').length;               // 0이 아닌 숫자 개수 (곱할 덩어리 수)
+    const mt_places = n => String(n).split('').map((d, i, s) => Number(d) * 10 ** (s.length - 1 - i)).filter(v => v);
+    const mt_other = (a, b, k) => a === k ? b : b === k ? a : 0;
+    const mt_digit0 = n => n % 10 === 0 && mt_core(n) < 10;               // 20, 70, 300 처럼 한 자리 수 뒤에 0만 붙은 수
+    // "x = y = z" 사슬 / "x → y" 를 한 줄에, 길면 두 줄로
+    const mt_chain = (...xs) => { const s = xs.join(' = '); return s.length <= mt_W ? [s] : [xs[0], `= ${xs.slice(1).join(' = ')}`]; };
+    const mt_then = (x, y) => { const s = `${x} → ${y}`; return s.length <= mt_W ? [s] : [x, `→ ${y}`]; };
+
+    // 0을 뗀 작은 곱 한 줄: 한쪽을 자리별로 쪼개 곱한다 (4×38 = 120 + 32 = 152, 47×38 = 1410 + 376 = 1786)
+    // ×2, 100 이하(25×3), 한 자리 곱으로 딱 떨어지는 백(75×4)은 바로 아는 값이라 쪼개지 않는다
+    function mt_coreLine(x, y) {
+      const big = Math.max(x, y), small = Math.min(x, y), [cut, by] = small < 10 ? [big, small] : [small, big];
+      const pl = mt_places(cut), easy = big < 10 || small === 2 || x * y <= 100 || (small < 10 && x * y % 100 === 0);
+      return pl.length < 2 || easy ? `${x}×${y} = ${x * y}` : `${x}×${y} = ${pl.map(v => v * by).join(' + ')} = ${x * y}`;
+    }
+
+    // 0 떼기: 40×38 → 4×38 = 152, 0을 붙여 1520
+    function mt_zero(a, b) {
+      const za = mt_zeros(a), zb = mt_zeros(b);
+      if (!za && !zb) return null;
+      const ca = mt_core(a), cb = mt_core(b), back = `${ca * cb} 뒤에 ${mt_ZERO[za + zb]} 붙여 ${a * b}`;
+      return ca === 1 || cb === 1 ? tip('0 떼기', back) : tip('0 떼기', mt_coreLine(ca, cb), back);
+    }
+
+    // 19단: 13×17 = (13 + 7)×10 + 3×7
+    function mt_teens(a, b) {
+      if (!inR(a, [11, 19]) || !inR(b, [11, 19])) return null;
+      const ua = a - 10, ub = b - 10;
+      return tip('19단 요령', `${a}×${b} = (${a} + ${ub})×10 + ${ua}×${ub}`, `= ${(a + ub) * 10} + ${ua * ub} = ${a * b}`);
+    }
+
+    // 제곱: 끝이 5면 앞자리×(앞자리 + 1) 뒤에 25 / 아니면 10의 배수로 올리고 내려 곱한 뒤 d² 더하기
+    function mt_square(n) {
+      const t = Math.floor(n / 10), u = n % 10;
+      if (u === 5) return tip('제곱 요령', '끝이 5면 앞자리×(앞자리 + 1) 뒤에 25를 붙여요', `${t}×(${t} + 1) = ${t * (t + 1)}`, `앞 ${t * (t + 1)}, 뒤 25를 붙여 ${n * n}`);
+      const hi = u > 5, d = hi ? 10 - u : u, r = hi ? n + d : n - d, o = hi ? n - d : n + d;
+      return tip('제곱 요령', '같은 만큼 내리고 올려 곱한 뒤 차의 제곱을 더해요',
+                 `${n} ${hi ? '+' : '−'} ${d} = ${r}, ${n} ${hi ? '−' : '+'} ${d} = ${o}`,
+                 `${n}² = ${r}×${o} + ${d}²`, `= ${r * o} + ${d * d} = ${n * n}`);
+    }
+    // 제곱 전개: 47² = (50 − 3)² = 2500 − 300 + 9
+    function mt_expand(n) {
+      const u = n % 10, hi = u > 5, d = hi ? 10 - u : u, r = hi ? n + d : n - d, s = hi ? '−' : '+';
+      return tip('제곱 전개', `${n}² = (${r} ${s} ${d})²`, `= ${r * r} ${s} ${2 * r * d} + ${d * d} = ${n * n}`);
+    }
+    function mt_squareTips(n) {
+      if (n % 10 === 0) return [mt_zero(n, n)];
+      if (n < 20) return n % 10 >= 5 ? [mt_teens(n, n), mt_square(n)] : [mt_teens(n, n)];
+      return [mt_square(n), mt_expand(n)];
+    }
+
+    // ×11: 두 숫자 사이에 합 끼우기 (78×11: 7 + 8 = 15 → 858). 30×11 처럼 0으로 끝나면 0 떼기가 낫다
+    function mt_x11(a, b) {
+      const x = mt_other(a, b, 11);
+      if (!x || x % 10 === 0) return null;
+      if (x < 10 || x > 99) return tip('×11 요령', ...mt_chain(`${x}×11`, `${x * 10} + ${x}`, `${x * 11}`));
+      const p = Math.floor(x / 10), q = x % 10, s = p + q;
+      return tip('×11 요령', '두 숫자 사이에 그 합을 끼워요', ...(s < 10
+        ? [`${p} + ${q} = ${s}`, `앞 ${p}, 가운데 ${s}, 끝 ${q} → ${x * 11}`]
+        : [`${p} + ${q} = ${s} → 1은 앞자리로 올려요`, `앞 ${p + 1}, 가운데 ${s - 10}, 끝 ${q} → ${x * 11}`]));
+    }
+
+    // 십의 자리가 같고 일의 자리 합이 10: 43×47 → 4×5 = 20, 3×7 = 21 → 2021
+    function mt_tenPair(a, b) {
+      const t = Math.floor(a / 10), ua = a % 10, ub = b % 10;
+      if (a === b || !inR(a, [11, 99]) || !inR(b, [11, 99]) || Math.floor(b / 10) !== t || ua + ub !== 10) return null;
+      const f = t * (t + 1), e = ua * ub;
+      return tip('끝자리 합 10', '십의 자리가 같고 일의 자리 합이 10이면', `${t}×(${t} + 1) = ${f}, ${ua}×${ub} = ${e}`,
+                 `앞 ${f}, 뒤 ${String(e).padStart(2, '0')}${eul(e)} 붙여 ${a * b}`);
+    }
+
+    // 둘 다 100 근처: 97×96 = (97 − 4)×100 + 3×4
+    function mt_near100(a, b) {
+      if (a === b || !inR(a, [91, 99]) || !inR(b, [91, 99])) return null;
+      const x = 100 - a, y = 100 - b;
+      return tip('100 근처', '모자란 수를 엇갈려 빼고 ×100, 둘의 곱을 더해요', `${a} = 100 − ${x}, ${b} = 100 − ${y}`, `${a}×${b} = (${a} − ${y})×100 + ${x}×${y}`, `= ${(a - y) * 100} + ${x * y} = ${a * b}`);
+    }
+
+    // 합차 공식: 가운데가 10의 배수일 때 47×53 = 50² − 3²
+    function mt_diffSq(a, b) {
+      const m = (a + b) / 2, d = Math.abs(a - b) / 2;
+      if (a === b || m % 10 || m < 20 || d > 9) return null;
+      const s = x => x < m ? '−' : '+';
+      return tip('합차 공식', `${a}×${b} = (${m} ${s(a)} ${d})×(${m} ${s(b)} ${d})`, `= ${m}² − ${d}² = ${m * m} − ${d * d} = ${a * b}`);
+    }
+
+    // 특별한 수: ×99, ×25, ×75, ×50, ×15, ×5, ×9
+    // 상대가 30·70 같은 수면 0을 떼고 한 자리 곱(25×3 = 75)만 하면 되므로 요령을 쓰지 않는다
+    function mt_x99(a, b) {
+      const x = mt_other(a, b, 99);
+      return x ? tip('×99 요령', '×99는 ×100 한 뒤 그 수를 한 번 빼요', ...mt_chain(`${x}×100 − ${x}`, `${x * 100} − ${x}`, `${x * 99}`)) : null;
+    }
+    function mt_x25(a, b) {
+      const x = mt_other(a, b, 25);
+      if (x < 5 || (x % 10 === 0 && x % 4)) return null;   // 20·40처럼 4로 나눠지면 ÷4가 깔끔하다
+      return x % 4 === 0
+        ? tip('×25 요령', '×25는 ÷4 한 뒤 ×100 해요', ...mt_then(`${x} ÷ 4 = ${x / 4}`, `${x / 4}×100 = ${x * 25}`))
+        : tip('×25 요령', '×25는 ×100 한 뒤 ÷4 해요', ...mt_then(`${x}×100 = ${x * 100}`, `${x * 100} ÷ 4 = ${x * 25}`));
+    }
+    function mt_x75(a, b) {
+      const x = mt_other(a, b, 75);
+      if (x < 5 || (x < 10 && x % 4) || (x % 10 === 0 && x % 4)) return null;   // 75×7은 쪼개기, 75×5·75×9는 ×5·×9가 쉽다
+      if (x % 4 && mt_round(a, b)) return null;   // 38×75 는 40×75 − 2×75 가 ÷4·×3 두 번보다 쉽다
+      return x % 4 === 0
+        ? tip('×75 요령', '×75는 ÷4 한 뒤 ×300 해요', ...mt_then(`${x} ÷ 4 = ${x / 4}`, `${x / 4}×300 = ${x * 75}`))
+        : tip('×75 요령', '×75는 ×100, ÷4 한 뒤 ×3 해요', `${x}×100 ÷ 4 = ${x * 25}`, `${x * 25}×3 = ${x * 75}`);
+    }
+    function mt_x50(a, b) {
+      const x = mt_other(a, b, 50);
+      if (x < 10 || mt_digit0(x)) return null;   // 50×7, 50×30 은 0 떼기(5×3)가 더 쉽다
+      return x % 2 === 0
+        ? tip('×50 요령', '×50은 반으로 나눈 뒤 ×100 해요', ...mt_then(`${x} ÷ 2 = ${x / 2}`, `${x / 2}×100 = ${x * 50}`))
+        : tip('×50 요령', '×50은 ×100 한 뒤 반으로 나눠요', ...mt_then(`${x}×100 = ${x * 100}`, `${x * 100} ÷ 2 = ${x * 50}`));
+    }
+    function mt_x15(a, b) {
+      const x = mt_other(a, b, 15);
+      if (x < 3 || x % 10 === 0) return null;
+      return tip('×15 요령', '×15는 ×10에 그 반을 더해요', `${x}×10 = ${x * 10}, ${x * 10} ÷ 2 = ${x * 5}`, `${x * 10} + ${x * 5} = ${x * 15}`);
+    }
+    function mt_x5(a, b) {
+      const x = mt_other(a, b, 5);
+      if (x < 10 || x % 10 === 0) return null;   // 40×5 는 0 떼기
+      return x % 2 === 0
+        ? tip('×5 요령', '×5는 반으로 나눈 뒤 ×10 해요', ...mt_then(`${x} ÷ 2 = ${x / 2}`, `${x / 2}×10 = ${x * 5}`))
+        : tip('×5 요령', '×5는 ×10 한 뒤 반으로 나눠요', ...mt_then(`${x}×10 = ${x * 10}`, `${x * 10} ÷ 2 = ${x * 5}`));
+    }
+    function mt_x9(a, b) {
+      const x = mt_other(a, b, 9);
+      return x >= 10 && x % 10 ? tip('×9 요령', '×9는 ×10 한 뒤 그 수를 한 번 빼요', ...mt_chain(`${x}×10 − ${x}`, `${x * 10} − ${x}`, `${x * 9}`)) : null;
+    }
+
+    // 반·두 배: 짝수 × 5로 끝나는 수 → 16×45 = 8×90 (곱할 덩어리가 줄어들 때만)
+    function mt_halve(a, b) {
+      const xFirst = a % 2 === 0 && b % 10 === 5;
+      if (!xFirst && !(b % 2 === 0 && a % 10 === 5)) return null;
+      let x = xFirst ? a : b, k = xFirst ? b : a;
+      if (x === 2 || k === 5 || k === 25 || k === 75) return null;   // ×2는 그냥 두 배, 나머지는 전용 요령
+      const terms = [];
+      while (x % 2 === 0 && mt_zeros(k * 2) > mt_zeros(k)) {
+        const nx = x / 2, nk = k * 2, term = nx === 1 ? `${nk}` : xFirst ? `${nx}×${nk}` : `${nk}×${nx}`;
+        const tail = nx === 1 ? [...terms, term] : [...terms, term, `${a * b}`];
+        if (`= ${tail.join(' = ')}`.length > mt_W) break;   // 두 줄 안에 들어갈 만큼만
+        x = nx; k = nk; terms.push(term);
+      }
+      if (!terms.length) return null;
+      const work = mt_nz(mt_core(k)) * mt_nz(x);
+      if (work > 2 || work >= mt_nz(a) * mt_nz(b)) return null;
+      if (x !== 1) terms.push(`${a * b}`);
+      return tip('반·두 배', '한쪽은 반으로, 다른 쪽은 두 배로', ...mt_chain(`${a}×${b}`, ...terms));
+    }
+
+    // 암산 수고 어림: n에 한 자리 수 m을 곱하는 수고 (×0·×1 공짜, 구구단·두 배 쉬움, ×5는 ×10의 반)
+    const mt_mulCost = (n, m) => m <= 1 ? 0 : n < 10 || m === 2 ? 0.5 : m === 5 ? 0.7 : mt_nz(n) * 0.5;
+    // 기본 쪼개기(아래 수를 자리별로, 아래가 한 자리면 위 수를 자리별로)의 수고
+    function mt_splitCost(a, b) {
+      const top = Math.max(a, b), bot = Math.min(a, b);
+      const [n, ds] = bot >= 10 ? [top, String(bot)] : [null, String(top)];
+      const parts = ds.split('').map(Number).filter(d => d);
+      return parts.reduce((s, d) => s + (n ? mt_mulCost(n, d) : mt_mulCost(d, bot)), 0) + 0.3 * (parts.length - 1);
+    }
+
+    // 반올림: 10·100의 배수에 가까운 수를 딱 떨어지게 바꾸고 차이만큼 빼거나 더한다 (49×38 = 50×38 − 38)
+    // 기본 쪼개기보다 실제로 덜 수고로울 때만 쓴다 (68×31 은 68×30 + 68 이 더 쉽다)
+    function mt_round(a, b) {
+      const cands = [];
+      for (const [k, y] of [[a, b], [b, a]]) {
+        const u = k % 10;
+        if (k < 10 || k === 99) continue;                                         // 99는 ×99 요령
+        if (k < 100) {
+          if (u >= 8) cands.push({ k, y, r: k + 10 - u });                        // 38 → 40, 98 → 100
+          else if (k >= 95) cands.push({ k, y, r: 100 });                         // 95~97 → 100
+          else if ((u === 1 || u === 2) && k > y && y >= 10) cands.push({ k, y, r: k - u });   // 큰 쪽 72 → 70
+        } else if (k % 100 >= 91) cands.push({ k, y, r: k - k % 100 + 100 });     // 398 → 400
+      }
+      const cost = c => mt_mulCost(c.y, mt_core(c.r)) + mt_mulCost(c.y, Math.abs(c.r - c.k)) + (c.r > c.k ? 0.4 : 0.3);
+      const best = cands.sort((p, q) => cost(p) - cost(q))[0];
+      if (!best || cost(best) >= mt_splitCost(a, b)) return null;
+      const { k, y, r } = best, d = Math.abs(r - k), s = r > k ? '−' : '+';
+      return tip('반올림 요령', `${k} = ${r} ${s} ${d}`, `${a}×${b} = ${r}×${y} ${s} ${d === 1 ? y : `${d}×${y}`}`, `= ${r * y} ${s} ${d * y} = ${a * b}`);
+    }
+
+    // 세 자리 × 한 자리: 백·십·일 자리로 쪼개 더하기 (347×6 = 1800 + 240 + 42)
+    function mt_places3(a, b) {
+      const x = Math.max(a, b), y = Math.min(a, b), pl = mt_places(x);
+      if (x < 100 || y > 9 || x % 10 === 0) return null;
+      return tip('암산 팁', pl.map(v => `${v}×${y}`).join(' + '), `= ${pl.map(v => v * y).join(' + ')} = ${x * y}`);
+    }
+
+    // 앞에 있을수록 먼저 보여 줄 요령
+    const mt_ORDER = [mt_teens, mt_x11, mt_tenPair, mt_near100, mt_diffSq, mt_x99, mt_x25, mt_x75, mt_x50, mt_x15, mt_zero, mt_x5,
+      (a, b) => Math.max(a, b) < 100 ? mt_x9(a, b) : null, mt_halve, mt_round, mt_places3,
+      (a, b) => Math.max(a, b) >= 100 ? mt_x9(a, b) : null];
+    // 요령이 하나뿐이면 기본 "쪼개서 곱하기"를 덧붙인다. 그 요령이 이미 쪼개는 방식이면 생략
+    // (×11은 두 자리 수에 끼우기를 쓸 때만 "×10 + 한 번" 쪼개기가 다른 방법이 된다)
+    const mt_splitAdds = (t, a, b) => !['19단 요령', '0 떼기', '암산 팁', '×15 요령'].includes(t.title)
+      && !(t.title === '×11 요령' && !inR(mt_other(a, b, 11), [10, 99]));
+
+    multTips = function (a, b) {
+      if (a < 10 && b < 10) return [];                    // 구구단
+      if (a === 1 || b === 1) return [];                  // ×1은 그 수 그대로 (곱셈표 1행)
+      if (mt_core(a) === 1 || mt_core(b) === 1) return [mt_zero(a, b)];   // ×10·×100은 0만 붙이면 된다
+      if (a === b) return mt_squareTips(a);
+      const tips = [];
+      for (const f of mt_ORDER) {
+        const t = f(a, b);
+        if (t) tips.push(t);
+        if (tips.length === 2) return tips;
+      }
+      if (!tips.length || mt_splitAdds(tips[0], a, b)) tips.push(...multSplitTips(a, b));
+      return tips.slice(0, 2);
+    };
+
+  // ===== 퍼센트: 뒤집기 · 분수 → % =====
+    // ---------- 퍼센트 확장: 뒤집기 (A의 B% = B의 A%) ----------
+    // A의 B% = A × B ÷ 100 = B의 A%. 쉬운 쪽(50·25·20·150 …)을 %로 두면 암산이 끝난다.
+
+    // "X의 a%" 를 쉬운 a로 구하는 줄들
+    const ps_half = X => ['50%', `${X}의 절반 = ${X / 2}`];
+    const ps_quarter = (X, head = '25%') => [head, X >= 100 ? `${X} ÷ 4 = ${X / 2} ÷ 2 = ${X / 4}` : `${X} ÷ 4 = ${X / 4}`];
+    const ps_eighth = X => ['÷8', X >= 100 ? `${X} ÷ 8 = ${X / 2} ÷ 4 = ${X / 8}` : `${X} ÷ 8 = ${X / 8}`];
+    const ps_fifth = X => ['20%', X > 45 ? `${X} ÷ 5 = ${X * 2} ÷ 10 = ${X / 5}` : `${X} ÷ 5 = ${X / 5}`];
+    const ps_times = (head, v, k) => [head, `${v} × ${k} = ${v * k}`];
+    const ps_plus = (head, X, v) => [head, `${X} + ${v} = ${X + v}`];
+
+    // 쉬운 % a → { need: X가 need의 배수면 중간값이 모두 정수, steps: 풀이 줄, line: 팁 한 줄 }
+    const ps_WAYS = {
+      50:   { need: 2, steps: X => [ps_half(X)],
+              line: X => `= ${X}의 절반 = ${X / 2}` },
+      25:   { need: 4, steps: X => [ps_quarter(X)],
+              line: X => `= ${X} ÷ 4 = ${X / 4}` },
+      20:   { need: 5, steps: X => [ps_fifth(X)],
+              line: X => `= ${X} ÷ 5 = ${X / 5}` },
+      75:   { need: 4, steps: X => [ps_quarter(X), ps_times('75%', X / 4, 3)],
+              line: X => `= ${X} ÷ 4 × 3 = ${X / 4} × 3 = ${X * 3 / 4}` },
+      120:  { need: 5, steps: X => [ps_fifth(X), ps_plus('120%', X, X / 5)],
+              line: X => `= ${X} + ${X} ÷ 5 = ${X} + ${X / 5} = ${X * 6 / 5}` },
+      125:  { need: 4, steps: X => [ps_quarter(X), ps_plus('125%', X, X / 4)],
+              line: X => `= ${X} + ${X} ÷ 4 = ${X} + ${X / 4} = ${X * 5 / 4}` },
+      150:  { need: 2, steps: X => [ps_half(X), ps_plus('150%', X, X / 2)],
+              line: X => `= ${X} + ${X}의 절반 = ${X} + ${X / 2} = ${X * 3 / 2}` },
+      250:  { need: 2, steps: X => [ps_half(X), ps_times('250%', X / 2, 5)],
+              line: X => `= ${X}의 절반 × 5 = ${X / 2} × 5 = ${X * 5 / 2}` },
+    };
+    for (const k of [2, 3, 4]) {   // 40·60·80% = 20% × 2·3·4
+      ps_WAYS[20 * k] = { need: 5, steps: X => [ps_fifth(X), ps_times(`${20 * k}%`, X / 5, k)],
+                          line: X => `= ${X} ÷ 5 × ${k} = ${X / 5} × ${k} = ${X * k / 5}` };
+    }
+    // 자료 크기의 기준값: 1/4·1/8 묶음 × 10·100 (750 = 3/4 × 1000, 1250 = 1/8 × 10000 …)
+    // [A, 나눌 수, 곱할 수, "a% = …배 = …배 ÷ q"]
+    for (const [a, q, k, why] of [[750, 4, 30, '7.5배 = 30배 ÷ 4'], [2500, 4, 100, '25배 = 100배 ÷ 4'],
+                                  [1250, 8, 100, '12.5배 = 100배 ÷ 8'], [375, 8, 30, '3.75배 = 30배 ÷ 8'],
+                                  [625, 8, 50, '6.25배 = 50배 ÷ 8']]) {
+      ps_WAYS[a] = { need: q, why: `${a}% = ${why}`,
+                     steps: X => [q === 4 ? ps_quarter(X, '÷4') : ps_eighth(X), ps_times(`×${k}`, X / q, k)],
+                     line: X => `= ${X} ÷ ${q} × ${k} = ${X / q} × ${k} = ${X * a / 100}` };
+    }
+
+    // "A의 B%" 가 이미 쉬운 B: 10의 배수(10% 덩어리), 25의 배수, 1·2·4·5%
+    const ps_easyB = B => B % 10 === 0 || B % 25 === 0 || [1, 2, 4, 5].includes(B);
+
+    // A의 B% 풀이 팁: A가 100 이하의 쉬운 %(20·25·40·50·60·75·80)이고 B는 덩어리로 세기 번거로울 때만
+    // (15%는 10% + 그 절반으로 이미 쉬워서 뺀다)
+    swapTip = (A, B) => {
+      const w = A <= 100 && ps_WAYS[A];
+      return w && B % w.need === 0 && !ps_easyB(B) && B !== 15 ? tip('뒤집기', `${A}의 ${B}% = ${B}의 ${A}%`, w.line(B)) : null;
+    };
+
+    // 같은 답을 내는 다른 길 (있을 때만). X는 늘 ps_WAYS[A].need의 배수라 중간값이 모두 정수
+    function ps_altTip(A, X) {
+      const h = X / 2, ans = A * X / 100;
+      if (ps_WAYS[A].why) return tip('배수로 보기', ps_WAYS[A].why);
+      if (A === 50 && X >= 100) {
+        const a = X - X % 100, b = X % 100;   // 138 = 100 + 38 → 50 + 19
+        return tip('쪼개서 절반', `${X} = ${a} + ${b}`, `→ ${a / 2} + ${b / 2} = ${h}`);
+      }
+      switch (A) {
+        case 25:  return X < 100 ? tip('다른 길', '25% = 절반의 절반', `${X} → ${h} → ${X / 4}`) : null;
+        case 75:  return tip('다른 길', '75% = 100% − 25%', `${X} − ${X / 4} = ${ans}`);
+        case 40:  return tip('다른 길', '40% = 2/5', `${X} × 2 = ${X * 2} → ÷ 5 = ${ans}`);
+        case 60:  return tip('다른 길', '60% = 100% − 40%', `${X} − ${X * 2 / 5} = ${ans}`);
+        case 80:  return tip('다른 길', '80% = 100% − 20%', `${X} − ${X / 5} = ${ans}`);
+        case 125: return tip('다른 길', '125% = 5/4', `${X} ÷ 4 × 5 = ${X / 4} × 5 = ${ans}`);
+        case 150: return tip('다른 길', '150% = 3/2', `${X} ÷ 2 × 3 = ${h} × 3 = ${ans}`);
+        case 250: return tip('다른 길', '250% = 200% + 50%', `${X * 2} + ${h} = ${ans}`);
+      }
+      return null;   // 20%는 본 풀이(÷5 = ×2 ÷ 10)가 이미 그 길
+    }
+
+    // 뒤집으면 쉬운 A (자주 나올 것을 여러 번 넣음). B는 6~99%가 대부분, 가끔 101~199%(증가율·배율 꼴).
+    // 문제 공간이 원래 작다(약 560개): A는 쉬운 %로 고정이고, B는 이미 쉬운 수(10·25의 배수 등)를 빼야 하므로.
+    const ps_SWAP_A = [25, 25, 25, 50, 50, 50, 20, 40, 60, 80, 75, 75, 150, 250, 125, 120,
+                       750, 750, 2500, 2500, 1250, 1250, 375, 625];
+
+    TYPES.swap = {
+      section: 'pct', title: '뒤집기', ex: '25의 16% = 16의 25%', fields: ['A', 'B'],
+      gen() {
+        const A = pick(ps_SWAP_A), m = ps_WAYS[A].need;
+        const [lo, hi] = coin(0.1) ? [101, 199] : [m === 5 ? 11 : 6, 99];
+        for (;;) {
+          const B = m * rnd(Math.ceil(lo / m), Math.floor(hi / m));
+          if (!ps_easyB(B)) return { t: 'swap', A, B };
+        }
+      },
+      answer: p => p.A * p.B / 100,
+      prompt: p => ({ main: `${p.A} × ${p.B}%`, sub: `${p.A}의 ${p.B}%는?` }),
+      label: p => `${p.A}의 ${p.B}%`,
+      hint: p => {
+        const { A, B } = p, tips = [], alt = ps_altTip(A, B);
+        if (alt) tips.push(alt);
+        tips.push(tip('뒤집기 원리', `${A}의 ${B}% = ${A} × ${B} ÷ 100`, `= ${B} × ${A} ÷ 100 = ${B}의 ${A}%`));
+        return { steps: [['뒤집기', `${A}의 ${B}% = ${B}의 ${A}%`], ...ps_WAYS[A].steps(B)], tips };
+      },
+    };
+
+    // ---------- 분수 → % ----------
+    // 분모 묶음 [뽑을 비율(%), 분모들]. 답(%)이 정수가 되는 분자만 쓰므로 문제 공간은 약 8,000개
+    const ps_DENOMS = [
+      [24, [20, 25, 50]],                                         // 곱해서 100
+      [36, [200, 300, 400, 500, 600, 700, 800, 900, 1200, 1500, 1600,
+            2000, 2400, 3000, 4000, 5000, 6000, 8000]],           // 나눠서 100
+      [14, [125, 250, 1250, 2500]],                               // ×8·×4 해서 1000·10000
+      [21, [30, 40, 60, 70, 75, 80, 90, 120, 140, 150, 160, 175, 180, 225,
+            240, 320, 350, 360, 375, 450, 480, 550, 650, 750]],   // 약분 먼저
+      [5,  [4, 5, 10, 12, 15, 24, 35, 45]],                       // 몸풀기: 1/4·1/5·1/10 꼴
+    ];
+    function ps_pickDenom() {
+      let r = rnd(1, 100);
+      for (const [w, ds] of ps_DENOMS) if ((r -= w) <= 0) return pick(ds);
+    }
+    const ps_X1000 = d => [125, 250, 1250, 2500].includes(d);   // ×8·×4 하면 1000·10000
+    const ps_EIGHTHS = ['1/8 = 12.5%, 3/8 = 37.5%', '5/8 = 62.5%, 7/8 = 87.5%'];
+
+    // 꼭 외워 둘 분수 (분모에 맞춰 고른 표)
+    function ps_tableTip(d) {
+      if (d % 3 === 0) return tip('외워 두기', '1/3 ≈ 33.3%, 2/3 ≈ 66.7%', '1/6 ≈ 16.7%, 5/6 ≈ 83.3%', '1/12 ≈ 8.3%, 1/15 ≈ 6.7%');
+      if (ps_X1000(d)) return tip('외워 두기', ...ps_EIGHTHS, '1/125 = 0.8%, 1/250 = 0.4%');
+      if ([40, 80, 160, 320].includes(d)) return tip('외워 두기', ...ps_EIGHTHS, d % 80 ? '1/16 = 6.25%, 1/40 = 2.5%' : '1/16 = 6.25%, 1/80 = 1.25%');
+      if (d % 7 === 0) return tip('외워 두기', '1/7 ≈ 14.3%, 2/7 ≈ 28.6%', '3/7 ≈ 42.9%, 1/14 ≈ 7.1%');
+      return tip('외워 두기', '1/8 = 12.5%, 1/6 ≈ 16.7%', '1/7 ≈ 14.3%, 1/9 ≈ 11.1%', '1/3 ≈ 33.3%, 1/11 ≈ 9.1%');
+    }
+
+    // 눈에 보이는 약분만 이어서: 끝의 0(÷10·÷100…)을 먼저 지우고, 분자가 분모를 나누면 한 번에,
+    // 아니면 한눈에 보이는 큰 수(25·24·20·16·15·…)부터. 예) 390/650 = 39/65 = 3/5
+    const ps_GLANCE = [25, 24, 20, 18, 16, 15, 14, 13, 12, 11, 9, 8, 7, 6, 5, 4, 3, 2];
+    function ps_reduceChain(n, d) {
+      const parts = [`${n}/${d}`];
+      for (let g = gcd(n, d); g > 1; g = gcd(n, d)) {
+        let f = 1;
+        while (g % (f * 10) === 0) f *= 10;
+        if (f === 1) f = n === g ? g : ps_GLANCE.find(q => g % q === 0) || g;
+        n /= f; d /= f;
+        parts.push(`${n}/${d}`);
+      }
+      return parts.join(' = ');
+    }
+
+    TYPES.frac = {
+      section: 'pct', title: '분수 → %', ex: '13/20 = 65%', unit: '%', fields: ['A', 'B'],
+      gen() {
+        const d = ps_pickDenom(), s = 100 / gcd(d, 100);   // 답(%)이 s의 배수여야 분자가 정수
+        const [lo, hi] = coin(0.25) ? [101, 300] : [1, 99];
+        for (;;) {
+          const P = s * rnd(Math.ceil(lo / s), Math.floor(hi / s));
+          if (P % 100) return { t: 'frac', A: P * d / 100, B: d };
+        }
+      },
+      answer: p => p.A * 100 / p.B,
+      prompt: p => ({ main: `${p.A}/${p.B}`, sub: `${p.A}/${p.B}${eun(p.A)} 몇 %?` }),
+      label: p => `${p.A}/${p.B}${eun(p.A)} 몇 %`,
+      heading: p => `${p.A}/${p.B} = ${p.A * 100 / p.B}%`,
+      hint: p => {
+        const n = p.A, d = p.B, P = n * 100 / d, full = `${n}/${d} = ${P}/100 = ${P}%`;
+        const done = ['답', full.length <= 26 ? full : `${P}/100 = ${P}%`];   // 다섯 자리 분자는 짧게
+        // 답이 정수 %라서 끝까지 약분하면 분모(dr)는 늘 100의 약수
+        const g = gcd(n, d), nr = n / g, dr = d / g, reduce = ['약분', ps_reduceChain(n, d)];
+        let steps, quick = false;
+        if (100 % d === 0) {                       // 곱해서 100
+          const k = 100 / d;
+          steps = [['분모', `${d} × ${k} = 100`], ['분자', `${n} × ${k} = ${P}`], done];
+        } else if (dr <= 10 && nr < dr && (d % 100 || g <= 100)) {
+          // 아는 진분수(1/2·3/4·2/5·7/10 …)로 바로. 분모가 100의 배수면 큰 약분보다 ÷(d/100)이 빠르다
+          quick = true;
+          steps = [reduce, ['답', `${nr}/${dr} = ${P}%`]];
+        } else if (ps_X1000(d)) {                  // 곱해서 1000·10000 (÷25 = ×4÷100)
+          const k = d === 125 || d === 1250 ? 8 : 4;
+          steps = [['분모', `${d} × ${k} = ${d * k}`], ['분자', `${n} × ${k} = ${n * k}`], ['답', `${n * k}/${d * k} = ${P}%`]];
+        } else if (d % 100 === 0) {                // 나눠서 100
+          const k = d / 100;
+          steps = [['분모', `${d} ÷ ${k} = 100`], ['분자', `${n} ÷ ${k} = ${P}`], done];
+        } else {                                   // 약분해서 분모 20·25·50 → 곱해서 100
+          const k = 100 / dr;
+          steps = [reduce, ['분모', `${dr} × ${k} = 100`], ['분자', `${nr} × ${k} = ${P}`], done];
+        }
+        const tips = [];
+        if (n > d) {
+          const w = Math.floor(n / d);
+          tips.push(tip('대분수', `${n}/${d} = ${w} + ${n - w * d}/${d}`, `→ ${100 * w}% + ${P - 100 * w}% = ${P}%`));
+        } else if (!quick && ps_X1000(d)) {      // 아는 분수로 끝났으면 다른 길은 생략
+          const f = d < 1000 ? 5 : 25;
+          tips.push(tip('다른 길', `위아래 ÷ ${f}: ${n}/${d} = ${n / f}/${d / f}`, d / f === 100 ? `= ${P}%` : `= ${P}/100 = ${P}%`));
+        } else if (!quick && d === 40) {
+          tips.push(tip('다른 길', `1/40 = 2.5% → ${n} × 2.5% = ${P}%`));
+        }
+        tips.push(ps_tableTip(d));
+        return { steps, tips };
+      },
+    };
+
+  // ===== 퍼센트: %p와 % · 연속 증감 확장 =====
+    // ---------- 퍼센트 확장: %p와 % ----------
+    // 비율 r1% → r2%. %p = 비율끼리 뺀 차이, % = 그 차이를 처음 비율로 나눈 증감률.
+
+    // 비율 이름과 그럴듯한 범위 [이름, 최소, 최대]. 모두 받침으로 끝나서 뒤에 "은"
+    const pp_CTX = [
+      ['시장 점유율', 1, 90], ['실업률', 1, 20], ['고용률', 30, 90], ['투표율', 20, 95],
+      ['합격률', 5, 95], ['취업률', 20, 95], ['흡연율', 5, 50], ['불량률', 1, 20],
+      ['보급률', 1, 99], ['가입률', 1, 99], ['응답 비율', 1, 99], ['수출 비중', 1, 90],
+      ['득표율', 5, 90], ['진학률', 10, 99], ['이용률', 1, 99], ['재구매율', 5, 90],
+    ];
+
+    // 증감률이 정수인 (r1, r2) 쌍 모음: 차이 × 100 이 r1로 나누어떨어짐.
+    // 쌍 전체 / 처음 비율별 / 증감률별로 묶어 두고 셋 중 하나를 고르게 뽑는다 (50%·25%만 반복되지 않게)
+    function pp_pool(keep) {
+      const pairs = [], byStart = {}, byRel = {};
+      for (let a = 1; a <= 99; a++) for (let b = 1; b <= 99; b++) {
+        const d = Math.abs(b - a), rel = 100 * d / a;
+        if (a === b || 100 * d % a || !keep(a, b, rel)) continue;
+        pairs.push([a, b]);
+        (byStart[a] = byStart[a] || []).push([a, b]);
+        (byRel[rel] = byRel[rel] || []).push([a, b]);
+      }
+      // 묶음은 고를 거리가 여럿인 것만 (37% → 74%, 50% → 49% 같은 외톨이만 반복되지 않게)
+      return [[pairs], Object.values(byStart).filter(x => x.length >= 3), Object.values(byRel).filter(x => x.length >= 2)];
+    }
+    const pp_DOWN = pp_pool((a, b, rel) => b < a && rel <= 50);
+    const pp_DOWN_BIG = pp_pool((a, b, rel) => b < a && rel > 50);
+    const pp_UP = pp_pool((a, b, rel) => b > a && rel <= 100);
+    const pp_UP_BIG = pp_pool((a, b, rel) => b > a && rel > 100 && rel <= 400);
+
+    const pp_d = p => Math.abs(p.B - p.A);
+    const pp_rel = p => 100 * pp_d(p) / p.A;
+    const pp_up = p => p.B > p.A ? '증가' : '감소';
+
+    // d ÷ r1 을 %로. r1이 100의 약수면 바로 ×(100÷r1) (÷50 = ×2/100).
+    // 아니면 약분 → (가분수면 소수, 분모 20·25·50이면 /100) → %
+    function pp_relChain(d, r1) {
+      if (r1 === 1) return [String(d), `${100 * d}%`];
+      if (100 % r1 === 0) return [`${d}×${100 / r1}/100`, `${100 * d / r1}%`];
+      const g = gcd(d, r1), a = d / g, b = r1 / g, out = [];
+      if (b === 1) { if (g > 1) out.push(String(a)); }
+      else {
+        if (g > 1) out.push(`${a}/${b}`);
+        if (a > b) out.push(fmt(a / b));
+        else if (b >= 20) out.push(`${a * 100 / b}/100`);
+      }
+      out.push(`${100 * d / r1}%`);
+      return out;
+    }
+
+    TYPES.pp = {
+      section: 'pct', title: '%p와 %', ex: '20% → 25%: 5%p', fields: ['A', 'B', 'q', 'c'],
+      gen() {
+        // 감소 45% (그중 절반 넘게 줄어드는 것은 1/4), 증가 55% (그중 두 배 넘게 느는 것은 1/4)
+        const pool = coin(0.45) ? (coin(0.75) ? pp_DOWN : pp_DOWN_BIG) : (coin(0.75) ? pp_UP : pp_UP_BIG);
+        const [A, B] = pick(pick(pick(pool)));
+        const lo = Math.min(A, B), hi = Math.max(A, B);
+        const fit = pp_CTX.map((x, i) => i).filter(i => pp_CTX[i][1] <= lo && hi <= pp_CTX[i][2]);
+        return { t: 'pp', A, B, q: coin() ? 1 : 2, c: pick(fit) };
+      },
+      answer: p => p.q === 1 ? pp_d(p) : pp_rel(p),
+      unit: p => p.q === 1 ? '%p' : '%',
+      finalToken: p => `${TYPES.pp.answer(p)}${p.q === 1 ? '%p' : '%'}`,
+      prompt: p => ({ main: `${p.A}% → ${p.B}%`, sub: `${pp_CTX[p.c][0]}은 몇 ${p.q === 1 ? '%p' : '%'} ${pp_up(p)}했나요?` }),
+      label: p => `${pp_CTX[p.c][0]} ${p.A}% → ${p.B}% ${pp_up(p)}${p.q === 1 ? '폭' : '율'}`,
+      hint: p => {
+        const d = pp_d(p), rel = pp_rel(p), u = pp_up(p);
+        const diff = ['차이', `${Math.max(p.A, p.B)} − ${Math.min(p.A, p.B)} = ${d}`];
+        const steps = p.q === 1
+          ? [diff, ['%라면', `${d} ÷ ${p.A} = ${rel}% ${u}`], ['%p', `${d}%p ${u}`]]
+          : [diff, ['%p라면', `${d}%p ${u}`], ['%', `${d} ÷ ${p.A} (처음 비율)`], ['', `= ${pp_relChain(d, p.A).join(' = ')} ${u}`]];
+        return {
+          steps,
+          tips: [tip('%p와 %', '%p는 비율끼리 빼기', '%는 처음 비율로 나누기'),
+                 tip('함정', `"${d}% ${u}"는 틀린 말이에요`, `${d}%p ${u} 또는 ${rel}% ${u}`)],
+        };
+      },
+    };
+
+    // ---------- 연속 증감: 문제 늘리기 ----------
+    // A, B ∈ −60~+90 (0 제외), (100+A)(100+B)가 100의 배수이고 결과 ≠ 100.
+    // 둘 다 5의 배수인 쌍(433개, 그중 둘 다 ±50 이내 core)과,
+    // 한쪽이 ±25·±50·75이고 다른 쪽이 −8·+12·+36 같은 5의 배수 아닌 수인 쌍(280개)
+    const pp_TWICE = (() => {
+      const core = [], five = [], mixed = [];
+      for (let a = -60; a <= 90; a++) for (let b = -60; b <= 90; b++) {
+        const v = (100 + a) * (100 + b);
+        if (!a || !b || v % 100 || v === 10000) continue;
+        if (a % 5 === 0 && b % 5 === 0) {
+          five.push([a, b]);
+          if (Math.abs(a) <= 50 && Math.abs(b) <= 50) core.push([a, b]);
+        } else if (Math.abs(a % 5 ? a : b) <= 48) mixed.push([a, b]);
+      }
+      return { core, five, mixed };
+    })();
+
+    TYPES.twice.gen = function () {
+      const T = pp_TWICE, [A, B] = pick(coin(0.45) ? T.core : coin(0.35) ? T.five : T.mixed);
+      return { t: 'twice', A, B, dir: 1 };
+    };
+
+    // 팁 한 줄이 34자를 넘지 않게 연속 증감 팁만 다시 쓴다 (풀이 줄은 그대로)
+    const pp_twiceHint = TYPES.twice.hint;
+    TYPES.twice.hint = p => {
+      const h = pp_twiceHint(p), r = (100 + p.A) * (100 + p.B) / 100 - 100, c = p.A * p.B / 100;
+      const pr = x => x < 0 ? `(−${-x})` : String(x), sn = x => x < 0 ? `−${-x}` : String(x);
+      h.tips = [tip('주의', '두 증감률을 그냥 더하면 안 돼요',
+        `${pr(p.A)} + ${pr(p.B)} + ${pr(p.A)}×${pr(p.B)}÷100`,
+        `= ${sn(p.A + p.B)} ${sg(c)} ${Math.abs(c)} = ${sg(r)}${Math.abs(r)}%`)];
+      return h;
+    };
+
+  // ===== 나눗셈: 세 자리 ÷ 한 자리 · 네 자리 ÷ 두 자리 =====
+    // ---------- 나눗셈: 나누어떨어지는 나눗셈 ----------
+    // p = { A: 나누는 수, B: 몫 }. 나눌 수는 A × B 로 계산한다 (id는 "div1:8:96").
+    const dl_N = p => p.A * p.B;
+    const dl_PLACE = ['백의자리', '십의자리', '일의자리'];
+
+    // lo~hi 에서 몫을 뽑되, 10의 배수는 rate 확률로 다시 뽑는다 (너무 쉬운 문제 줄이기)
+    function dl_q(lo, hi, rate) {
+      for (;;) { const q = rnd(lo, hi); if (q % 10 || !coin(rate)) return q; }
+    }
+    // 나누는 수: 10의 배수는 rate 확률로 다시 뽑기
+    function dl_div(lo, hi, rate) {
+      for (;;) { const a = rnd(lo, hi); if (a % 10 || !coin(rate)) return a; }
+    }
+
+    // "a = b = c ..." 를 짧은 줄로 끊기 (마지막 답은 되도록 앞 줄에 붙인다)
+    function dl_wrap(terms) {
+      const lines = [terms[0]];
+      terms.slice(1).forEach((t, i, rest) => {
+        const k = lines.length - 1, joined = `${lines[k]} = ${t}`;
+        if (joined.length <= (i === rest.length - 1 ? 34 : 24)) lines[k] = joined;
+        else lines.push(`= ${t}`);
+      });
+      return lines;
+    }
+
+    // 끝자리 맞추기: 나누는 수 끝자리가 1·3·7·9면 몫의 끝자리가 하나로 정해진다.
+    // 몫이 두 자리일 때만 (세 자리면 '몇십 대'를 찾는 데 이미 나눗셈을 거의 다 하게 된다)
+    function dl_lastTip(N, d, q) {
+      const a1 = d % 10, o = q % 10, u = N % 10;
+      if (![1, 3, 7, 9].includes(a1) || !o || q >= 100) return null;
+      const src = d < 10 ? `${d}` : `${d}의 끝 ${a1}`;
+      return tip('끝자리 맞추기', `${src} × ${o} = ${a1 * o} → ${N}의 끝 ${u}`,
+                 `끝이 ${u}${ga(u)} 되는 몫 끝자리는 ${o}뿐이에요`, `어림으로 몫은 ${q - o}대 → ${q}`);
+    }
+
+    // ---------- 세 자리 ÷ 한 자리: 장제법 ----------
+    // 앞자리부터 한 자리씩: "76 ÷ 8 = 9 … 4" → 나머지 뒤에 다음 숫자를 붙여 "48 ÷ 8 = 6"
+    function dl_longSteps(N, d) {
+      const digits = String(N).split('').map(Number), place = dl_PLACE.slice(-digits.length);
+      const steps = [];
+      let cur = 0;
+      digits.forEach((x, i) => {
+        cur = cur * 10 + x;
+        const qd = Math.floor(cur / d), r = cur % d;
+        if (!steps.length && !qd) return;   // 맨 앞자리가 d보다 작으면 다음 자리까지 붙여서
+        let v = qd ? `${cur} ÷ ${d} = ${qd}${r ? ` … ${r}` : ''}`
+                   : cur ? `${cur} < ${d} → 몫에 0` : '0이라 몫에 0';
+        if (!steps.length && i > 0) v = `${digits[0]} < ${d} → ${v}`;
+        steps.push([place[i], v]);
+        cur = r;
+      });
+      return steps;
+    }
+
+    // 다른 길: 몫을 10 단위로 끊어 나누기 쉬운 두 덩어리로
+    function dl_routeTip(N, d, q) {
+      const o = q % 10;
+      if (!o) return tip('0 떼기', `${N / 10} ÷ ${d} = ${q / 10} → ${N} ÷ ${d} = ${q}`);
+      if (o >= 8) {
+        const hi = q + 10 - o;
+        return tip('빼서 나누기', `${N} = ${d * hi} − ${d * (10 - o)} (둘 다 ${d}의 배수)`, `→ ${hi} − ${10 - o} = ${q}`);
+      }
+      const lo = q - o;
+      return tip('쪼개서 나누기', `${N} = ${d * lo} + ${d * o} (둘 다 ${d}의 배수)`, `→ ${lo} + ${o} = ${q}`);
+    }
+
+    // 나누는 수에 맞춘 지름길
+    function dl_oneTip(N, d, q) {
+      switch (d) {
+        case 4: return tip('÷4 = 반의 반', `${N} → ${N / 2} → ${q}`);
+        case 8: return tip('÷8 = 반씩 세 번', `${N} → ${N / 2} → ${N / 4} → ${q}`);
+        case 5: return tip('÷5 = ×2 ÷10', `${N} × 2 = ${N * 2}`, `${N * 2} ÷ 10 = ${q}`);
+        case 6: return tip('÷6 = 반 → ÷3', `${N} ÷ 2 = ${N / 2}`, `${N / 2} ÷ 3 = ${q}`);
+        case 3: case 7: case 9: return dl_lastTip(N, d, q);
+      }
+      return null;
+    }
+
+    TYPES.div1 = {
+      section: 'div', title: '세 자리 ÷ 한 자리', ex: '768 ÷ 8 = 96', fields: ['A', 'B'],
+      gen() {
+        const A = coin(0.05) ? 2 : pick([3, 4, 5, 6, 6, 7, 7, 8, 8, 9, 9]);
+        return { t: 'div1', A, B: dl_q(Math.max(12, Math.ceil(100 / A)), Math.floor(999 / A), 0.8) };
+      },
+      answer: p => p.B,
+      prompt: p => ({ main: `${dl_N(p)} ÷ ${p.A}`, sub: '나누어떨어져요. 몫은?' }),
+      label: p => `${dl_N(p)} ÷ ${p.A}`,
+      heading: p => `${dl_N(p)} ÷ ${p.A} = ${p.B}`,
+      hint: p => {
+        const N = dl_N(p), d = p.A, q = p.B;
+        const route = dl_routeTip(N, d, q), own = dl_oneTip(N, d, q);
+        return {
+          steps: [...dl_longSteps(N, d), ['몫', `${q} (검산 ${d} × ${q} = ${N})`]],
+          tips: ([4, 5, 8].includes(d) ? [own, route] : [route, own]).filter(Boolean),
+        };
+      },
+    };
+
+    // ---------- 네 자리 ÷ 두 자리: 몫 어림 덩어리 빼기 ----------
+    // 몫을 가까운 10 단위 R로 어림해 A × R 을 빼고(넘치면 거꾸로 빼고), 남은 몇 배만 더하거나 뺀다.
+    function dl_chunkSteps(N, A, q) {
+      if (q % 10 === 0 && (q < 100 || q % 100 === 0)) {   // 0을 떼면 바로 끝나는 몫
+        const z = q % 100 ? 10 : 100;
+        return [['0 떼기', `${N / z} ÷ ${A} = ${q / z}`], ['몫', `${q} (검산 ${A} × ${q} = ${N})`]];
+      }
+      const o = q % 10, t = q % 100;
+      const R = q >= 100 && t >= 91 ? q - t + 100              // 193 → 200 − 7
+              : o >= 6 && (q < 100 || t > 10) ? q + 10 - o     // 48 → 50 − 2, 248 → 250 − 2
+              : q - o;                                         // 42 → 40 + 2, 214 → 210 + 4
+      const chunks = R >= 100 && R % 100 ? [R - R % 100, R % 100] : [R];
+      const steps = [];
+      let rem = N;
+      chunks.forEach((c, i) => {
+        const P = A * c;
+        steps.push([i ? '' : '어림', `${A} × ${c} = ${P}`]);
+        if (rem > P) steps.push(['남은 수', `${rem} − ${P} = ${rem - P}`]);
+        else if (rem < P) steps.push(['넘친 수', `${P} − ${rem} = ${P - rem}`]);
+        rem -= P;
+      });
+      const k = Math.abs(rem) / A;
+      if (k) steps.push(['', `${Math.abs(rem)} ÷ ${A} = ${k}`]);
+      steps.push(['몫', `${chunks.join(' + ')}${k ? ` ${rem > 0 ? '+' : '−'} ${k}` : ''} = ${q}`]);
+      return steps;
+    }
+
+    // 나누는 수를 바꿔 쉽게: 0 지우기, ×2·×4 로 0 만들기, 반씩 나누기.
+    // 바꾼 나누는 수가 12 넘게 남으면 더 쉬워지지 않으니 팁을 안 낸다.
+    function dl_shortTip(N, A, q) {
+      if (A % 10 === 0) return tip('0 지우기', `${N} ÷ ${A} = ${N / 10} ÷ ${A / 10} = ${q}`);
+      if (A === 25) return tip('÷25 = ×4 ÷100', `${N} × 4 = ${N * 4}`, `${N * 4} ÷ 100 = ${q}`);
+      if (A === 75) return tip('÷75 = ×4 ÷300', `${N} × 4 = ${N * 4}`, `${N * 4} ÷ 300 = ${N * 4 / 100} ÷ 3 = ${q}`);
+      if (A % 5 === 0) {   // 15·35·45·55 → ×2 하면 ÷3·÷7·÷9·÷11
+        if (A * 2 / 10 > 11) return null;
+        return tip(`÷${A} = ×2 ÷${A * 2}`, ...dl_wrap([`${N} ÷ ${A}`, `${N * 2} ÷ ${A * 2}`, `${N * 2 / 10} ÷ ${A * 2 / 10}`, q]));
+      }
+      if (A % 2) return null;
+      const terms = [`${N} ÷ ${A}`];
+      let n = N, a = A;
+      while (a % 2 === 0 && a > 9) { n /= 2; a /= 2; terms.push(`${n} ÷ ${a}`); }
+      if (a > 12) return null;
+      terms.push(String(q));
+      return tip('반씩 나누기', ...dl_wrap(terms));
+    }
+
+    // 어림 검산: 나누는 수를 나누기 쉬운 수(가까운 10의 배수, 23~27은 25, 95 이상은 100)로 바꿔 몫의 자리를 가늠
+    function dl_estTip(N, A, q) {
+      if (A < 18 || A % 10 === 0 || A === 25 || A === 75) return null;
+      const A2 = A >= 95 ? 100 : Math.abs(A - 25) <= 2 ? 25 : Math.round(A / 10) * 10;
+      const e10 = Math.round(N * 10 / A2), exact = (N * 10) % A2 === 0;
+      const big = A2 > A;
+      return tip('어림 검산', `${A} ≈ ${A2}: ${N} ÷ ${A2} ${exact ? '=' : '≈'} ${fmt(e10 / 10)}`,
+                 `나누는 수를 ${big ? '키웠' : '줄였'}으니 실제 몫은 더 ${big ? '커요' : '작아요'} → ${q}`);
+    }
+
+    TYPES.div2 = {
+      section: 'div', title: '네 자리 ÷ 두 자리', ex: '1428 ÷ 34 = 42', fields: ['A', 'B'],
+      gen() {
+        if (coin(0.25)) {   // 몫이 세 자리 (2568 ÷ 12 = 214)
+          const A = dl_div(12, 49, 0.75);
+          return { t: 'div2', A, B: dl_q(100, Math.floor(9999 / A), 0.85) };
+        }
+        const A = dl_div(12, 99, 0.75);
+        return { t: 'div2', A, B: dl_q(Math.max(11, Math.ceil(1000 / A)), 99, 0.85) };
+      },
+      answer: p => p.B,
+      prompt: p => ({ main: `${dl_N(p)} ÷ ${p.A}`, sub: '나누어떨어져요. 몫은?' }),
+      label: p => `${dl_N(p)} ÷ ${p.A}`,
+      heading: p => `${dl_N(p)} ÷ ${p.A} = ${p.B}`,
+      hint: p => {
+        const N = dl_N(p), A = p.A, q = p.B;
+        // 끝자리 맞추기(나누는 수가 홀수)와 지름길(짝수·5의 배수)은 함께 나오지 않는다
+        const main = dl_lastTip(N, A, q) || dl_shortTip(N, A, q);
+        const tips = [main, dl_estTip(N, A, q)];
+        return { steps: dl_chunkSteps(N, A, q), tips: tips.filter(Boolean) };
+      },
+    };
+
+  // ===== 나눗셈: 어림 =====
+    // ---------- 나눗셈: 어림 ----------
+    // p = { N, d, k }: k = 0 → N ÷ d 의 몫 어림, k = 1 → N이 d의 몇 %인지 어림 (id는 "est:3847:47:0")
+    // 정답은 반올림한 정수. 허용 범위: 몫은 ±max(1, 3%), 비율은 ±1%p.
+    // GSAT 선택지는 보통 3~5% 넘게 벌어져 있어 3% 안이면 고를 수 있다. 비율은 %p로 비교하므로 ±1%p.
+    // 몫은 20 이상만 낸다 (한 자리 몫에 ±1이면 아무 어림이나 정답이 된다).
+
+    // 나누기 쉬운 수: 한 자리 수 × 10ⁿ, 25·125 × 10ⁿ (÷25 = ×4, ÷125 = ×8)
+    const de_FRIENDLY = [];
+    for (let z = 1; z <= 10000; z *= 10) for (const m of [10, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 125]) de_FRIENDLY.push(m * z);
+    const de_near = d => de_FRIENDLY.reduce((b, D) => Math.abs(D - d) < Math.abs(b - d) ? D : b);
+
+    // a ÷ b 를 소수 dp자리로 반올림 (a, b는 정수): { v: 10^dp 배 정수, s: 보이는 글자, eq: '=' | '≈' }
+    function de_div(a, b, dp) {
+      const z = 10 ** dp, v = Math.round(a * z / b);
+      return { v, s: fmt(v / z), eq: (a * z) % b === 0 ? '=' : '≈' };
+    }
+    const de_num = p => p.k ? 100 * p.N : p.N;            // 구할 값 = de_num ÷ d
+    const de_x = p => de_div(de_num(p), p.d, 2);         // 정확한 값 (소수 둘째 자리)
+    const de_ans = p => Math.round(de_num(p) / p.d);
+    const de_pct = p => p.k ? '%' : '';
+    const de_what = p => p.k ? '비율' : '몫';
+
+    // 허용 범위: 몫 |v − N/d| ≤ max(1, 3%), 비율 |v − 100N/d| ≤ 1 (정수끼리 비교)
+    const de_ok = (p, v) => p.k ? Math.abs(v * p.d - 100 * p.N) <= p.d
+                                : 100 * Math.abs(v * p.d - p.N) <= Math.max(100 * p.d, 3 * p.N);
+
+    // 반올림이 애매한 문제는 버린다: 나누어떨어짐, 소수 둘째 자리 아래가 딱 5, .5 근처, 거의 정수
+    function de_clean(N, d, k) {
+      const s = k ? 100 * N : N, f = (s % d) / d;
+      if (!(s % d) || ((200 * s) % d === 0 && (100 * s) % d !== 0)) return false;
+      return f >= 0.005 && f <= 0.995 && Math.abs(f - 0.5) >= 0.005;
+    }
+    function de_divisor(lo, hi) {
+      for (;;) { const d = rnd(lo, hi); if (!de_FRIENDLY.includes(d)) return d; }
+    }
+
+    // 몫 어림: 세 자리 ÷ 두 자리 ~ 다섯 자리 ÷ 세 자리, 몫은 20 이상
+    function de_genQ() {
+      const r = Math.random();
+      const [nd, dd] = r < 0.15 ? [3, 2] : r < 0.45 ? [4, 2] : r < 0.65 ? [4, 3] : r < 0.75 ? [5, 2] : [5, 3];
+      const dHi = Math.min(10 ** dd - 1, Math.floor((10 ** nd - 1) / 20));   // 세 자리 ÷ 49, 네 자리 ÷ 499 까지
+      for (;;) {
+        const d = de_divisor(10 ** (dd - 1) + 1, dHi);
+        const N = rnd(Math.max(10 ** (nd - 1), 20 * d), 10 ** nd - 1);
+        if (de_clean(N, d, 0)) return { t: 'est', N, d, k: 0 };
+      }
+    }
+    // 비율 어림: 전체 d(세~다섯 자리) 중 N이 3~97%
+    function de_genP() {
+      const r = Math.random();
+      for (;;) {
+        const d = r < 0.3 ? de_divisor(120, 999) : r < 0.75 ? de_divisor(1000, 9999) : de_divisor(10000, 99999);
+        const N = rnd(Math.ceil(0.03 * d), Math.floor(0.97 * d));
+        if (N >= 10 && de_clean(N, d, 1)) return { t: 'est', N, d, k: 1 };
+      }
+    }
+
+    // 나누기 쉬운 수 D로 바꿔 어림 E를 구하고 보정한다.
+    // 나누는 수를 d → D 로 q = |D − d| ÷ d 만큼 키우면(줄이면) 실제 값은 정확히 (N ÷ D) × (1 ± q). q는 정수 P%로 반올림해 쓴다.
+    function de_swap(p) {
+      const D = de_near(p.d), big = D > p.d, num = de_num(p);
+      const e = num / D, dp = e >= 100 && !p.k ? 0 : e >= 10 ? 1 : 2, z = 10 ** dp;
+      const E = de_div(num, D, dp), P = Math.round(100 * Math.abs(D - p.d) / p.d);
+      const C = de_div(E.v * P, 100 * z, dp);   // E의 P%
+      const est = P ? fmt((E.v + (big ? 1 : -1) * C.v) / z) : E.s;
+      // ok: 이 어림을 반올림해 넣으면 정답 범위 안인지 (P를 정수 %로 반올림한 탓에 빗나가면 이 풀이는 안 쓴다)
+      return { D, big, P, E, C, est, ok: de_ok(p, Math.round(+est)) };
+    }
+
+    // 몫 쪼개기: N = d × c ± r (c는 몫의 앞 한두 자리), 남은 r ÷ d 는 소수로.
+    // r ÷ d 가 2 이상이면 가까운 배수 d × m 부터 보여 준다.
+    function de_splitQ(p) {
+      const { N, d } = p, a = de_ans(p);
+      const u = a < 10 ? 1 : 10 ** Math.max(1, String(a).length - 2);
+      const c = Math.round(N / d / u) * u, r = N - d * c, R = Math.abs(r), m = Math.round(R / d);
+      return { c, r, R, y: de_div(R, d, 2), near: m >= 2 ? `${d} × ${m} = ${d * m}` : '' };
+    }
+    // 10% 덩어리 세기: c% = d × c/100, 남은(넘친) 양을 1%(d/100)로 나눈다
+    function de_splitP(p) {
+      const { N, d } = p, c = Math.round(N * 10 / d) * 10;
+      const V10 = d * c / 10, r10 = 10 * N - V10;   // 10배 정수로 계산
+      return { c, r10, V: fmt(V10 / 10), R: fmt(Math.abs(r10) / 10), ten: fmt(d / 10), one: fmt(d / 100),
+               y: de_div(10 * Math.abs(r10), d, 2) };   // 남은 양 ÷ 1%
+    }
+
+    // 결론 끝 "→ 약 82" 는 줄바꿈으로 갈라지지 않게 붙인다
+    const de_tail = p => `→\u00a0약\u00a0${de_ans(p)}${de_pct(p)}`;
+    const de_last = p => [de_what(p), `정확히는 ${de_x(p).s}${de_pct(p)} ${de_tail(p)}`];
+
+    function de_swapSteps(p, w) {
+      const pc = de_pct(p);
+      const steps = [['바꾸기', w.P ? `${p.d} → ${w.D}: 약 ${w.P}% ${w.big ? '키웠어요' : '줄였어요'}` : `${p.d} → ${w.D}: 차이 0.5% 미만`],
+                     ['어림', `${p.N} ÷ ${w.D} ${w.E.eq} ${w.E.s}${pc}`]];
+      if (w.P) {
+        // 비율은 %p가 아니라 그 값의 몇 %인지 분명히
+        steps.push(['보정', `실제 ${de_what(p)}은 ${p.k ? `${w.E.s}%의 ` : ''}약 ${w.P}%${p.k ? '만큼' : ''} 더 ${w.big ? '커요' : '작아요'}`]);
+        steps.push([`${w.big ? '+' : '−'}${w.P}%`, `${w.E.s}의 ${w.P}% ${w.C.eq} ${w.C.s} → ${w.est}${pc}`]);
+      } else steps.push(['보정', '거의 같아서 그대로 써요']);
+      return [...steps, de_last(p)];
+    }
+
+    function de_splitQSteps(p) {
+      const { N, d } = p, { c, r, R, y, near } = de_splitQ(p);
+      return [
+        ['어림', `${d} × ${c} = ${d * c}`],
+        r > 0 ? ['남은 수', `${N} − ${d * c} = ${R}`] : ['넘친 수', `${d * c} − ${N} = ${R}`],
+        ...(near ? [['', near]] : []),
+        ['', `${R} ÷ ${d} ${y.eq} ${y.s}`],
+        ['몫', `${c} ${r > 0 ? '+' : '−'} ${y.s} = ${de_x(p).s} ${de_tail(p)}`],
+      ];
+    }
+
+    function de_splitPSteps(p) {
+      const { N, d } = p, { c, r10, V, R, ten, one, y } = de_splitP(p), steps = [];
+      if (c === 100) steps.push(['넘친 수', `${d}(100%) − ${N} = ${R}`]);
+      else if (c) {
+        steps.push(['10%', `${d} ÷ 10 = ${ten}`]);
+        if (c > 10) steps.push([`${c}%`, `${ten} × ${c / 10} = ${V}`]);
+        steps.push(r10 > 0 ? ['남은 수', `${N} − ${V} = ${R}`] : ['넘친 수', `${V} − ${N} = ${R}`]);
+      }
+      steps.push(['1%', `${d} ÷ 100 = ${one}`]);
+      steps.push(['', `${R} ÷ ${one} ${y.eq} ${y.s}`]);
+      steps.push(['비율', `${c ? `${c} ${r10 > 0 ? '+' : '−'} ${y.s} = ` : ''}${de_x(p).s}% ${de_tail(p)}`]);
+      return steps;
+    }
+
+    // ----- 팁 -----
+    // 몫 쪼개기로 확인 (바꿔 어림이 본 풀이일 때)
+    function de_splitQTip(p) {
+      const { N, d } = p, { c, r, R, y, near } = de_splitQ(p), s = r > 0 ? '+' : '−';
+      return tip('쪼개서 확인', `${N} = ${d} × ${c} ${s} ${R}`, ...(near ? [near] : []), `${R} ÷ ${d} ${y.eq} ${y.s}`, `${c} ${s} ${y.s} = ${de_x(p).s}`);
+    }
+    // 10%·1% 세기로 확인 (바꿔 어림이 본 풀이일 때)
+    function de_splitPTip(p) {
+      const { N, d } = p, { c, r10, V, R, ten, one, y } = de_splitP(p), x = de_x(p).s;
+      if (!c) return tip('1%로 확인', `1% = ${one}`, `${N} ÷ ${one} ${y.eq} ${y.s} → ${x}%`);
+      const head = c === 100 ? `100% = ${d}` : c === 10 ? `10% = ${V}` : `10% = ${ten} → ${c}% = ${V}`;
+      return tip('10%로 확인', head, r10 > 0 ? `${N} − ${V} = ${R}` : `${V} − ${N} = ${R}`,
+                 `${R} ÷ ${one}(1%) ${y.eq} ${y.s}`, `${c} ${r10 > 0 ? '+' : '−'} ${y.s} = ${x}%`);
+    }
+    // 바꿔 어림으로 방향·크기 확인 (쪼개기가 본 풀이일 때, 차이가 15% 이하이고 보정한 값이 정답 범위 안이면)
+    function de_swapTip(p, w) {
+      if (!w.P || w.P > 15 || !w.ok) return null;
+      const more = w.big ? '커요' : '작아요';
+      return tip('어림 검산', `${p.N} ÷ ${w.D} ${w.E.eq} ${w.E.s}${de_pct(p)}`,
+                 `${w.D}${eun(w.D)} ${p.d}보다 약 ${w.P}% ${more}`,
+                 p.k ? `→ 실제 비율은 그 값의 약 ${w.P}%만큼 더 ${more}` : `→ 실제 몫은 약 ${w.P}% 더 ${more}`,
+                 `${w.E.s}의 ${w.P}% ${w.C.eq} ${w.C.s} → ${w.est}${de_pct(p)}`);
+    }
+    // ÷25 = ×4 ÷100, ÷125 = ×8 ÷1000 (바꾼 수가 25·125 꼴일 때)
+    function de_trickTip(p, w) {
+      const m = String(w.D).startsWith('125') ? 8 : String(w.D).startsWith('25') ? 4 : 0;
+      if (!m) return null;
+      return tip(`÷${w.D} = ×${m} ÷ ${m * w.D}`, `${p.N} × ${m} = ${m * p.N}`, `${m * p.N} ÷ ${m * w.D} ${w.E.eq} ${w.E.s}${de_pct(p)}`);
+    }
+    // 분수 기준점: 가장 가까운 쉬운 분수와 크기 비교 (보이는 숫자가 같아지면 다음 후보)
+    const de_MARKS = [[1, 20], [1, 10], [1, 8], [1, 6], [1, 5], [1, 4], [1, 3], [3, 8], [2, 5], [1, 2],
+                      [3, 5], [5, 8], [2, 3], [3, 4], [4, 5], [5, 6], [7, 8], [9, 10], [19, 20]];
+    function de_markTip(p) {
+      const { N, d } = p, X = 100 * N / d, dp = d >= 10000 ? 0 : 1;
+      const gap = ([u, v]) => Math.abs(100 * u / v - X);
+      for (const [u, v] of de_MARKS.slice().sort((m1, m2) => gap(m1) - gap(m2))) {
+        const T = de_div(d * u, v, dp), L = de_div(100 * u, v, 1);
+        if (T.v === N * 10 ** dp) continue;
+        const less = N * v < d * u;
+        return tip('분수 기준점', `${u}/${v} ${L.eq} ${L.s}% → ${d}의 ${u}/${v} ${T.eq} ${T.s}`,
+                   `${N} ${less ? '<' : '>'} ${T.s} → ${u}/${v}보다 ${less ? '작아요' : '커요'}`);
+      }
+      return null;
+    }
+    // 정답으로 인정하는 범위
+    function de_rangeTip(p) {
+      let lo = de_ans(p), hi = lo;
+      while (lo > 1 && de_ok(p, lo - 1)) lo--;
+      while (de_ok(p, hi + 1)) hi++;
+      return tip('허용 범위', `${lo}부터 ${hi}까지 모두 정답이에요`, '이 정도로만 맞히면 충분해요');
+    }
+    // 다섯 자리는 앞 세 자리만 (오차 50 ÷ 10000 = 0.5% 미만)
+    function de_bigTip(p) {
+      const N3 = Math.round(p.N / 100) * 100;
+      if (p.N < 10000 || N3 === p.N) return null;
+      return tip('앞 세 자리만', `${p.N} ≈ ${N3} (오차 0.5% 미만)`, '어림할 땐 앞 세 자리면 충분해요');
+    }
+
+    TYPES.est = {
+      section: 'div', title: '어림 나눗셈', ex: '3847 ÷ 47 ≈ 82', fields: ['N', 'd', 'k'],
+      gen: () => coin(0.35) ? de_genP() : de_genQ(),
+      answer: de_ans,
+      unit: de_pct,
+      accept: de_ok,
+      answerText: p => `약 ${de_ans(p)}${de_pct(p)}`,
+      heading: p => { const x = de_x(p); return `${p.N} ÷ ${p.d} ${x.eq} ${x.s}${de_pct(p)}`; },
+      prompt: p => ({
+        main: `${p.N} ÷ ${p.d}`,
+        sub: p.k ? '비율은 약 몇 %? (오차 ±1%p까지 정답)' : `몫은 대략 얼마? (오차 ±${3 * p.N > 100 * p.d ? '3%' : '1'}까지 정답)`,
+      }),
+      label: p => p.k ? `${p.N}${eun(p.N)} ${p.d}의 몇 %` : `${p.N} ÷ ${p.d} 어림`,
+      hint: p => {
+        const w = de_swap(p);
+        if (w.P <= 7 && w.ok) {   // 가까운 쉬운 수가 있고 그 어림이 정답 범위에 들면 바꿔 어림이 본 풀이
+          const check = p.k ? de_splitPTip(p) : de_splitQTip(p);
+          const more = de_trickTip(p, w) || (p.k ? de_markTip(p) : de_bigTip(p) || de_rangeTip(p));
+          return { steps: de_swapSteps(p, w), tips: [check, more].filter(Boolean) };
+        }
+        return p.k ? { steps: de_splitPSteps(p), tips: [de_markTip(p), de_swapTip(p, w)].filter(Boolean) }
+                   : { steps: de_splitQSteps(p), tips: [de_swapTip(p, w), de_bigTip(p) || de_rangeTip(p)].filter(Boolean) };
+      },
+    };
+
+  // ===== 나눗셈: 분수 비교 =====
+    // ---------- 나눗셈: 분수 비교 (어느 쪽이 더 큰가) ----------
+    // p = { A, B, C, D } → 앞 A/B 와 뒤 C/D 중 큰 쪽 (정답 1 = 앞, 2 = 뒤). 두 분수는 절대 같지 않게 만든다.
+    const dc_big = p => p.A * p.D > p.C * p.B ? 1 : 2;
+    const dc_side = p => dc_big(p) === 1 ? '앞' : '뒤';
+    const dc_is = s => s === '앞' ? '앞이' : '뒤가';
+    // 두 분수 값의 상대 차이 (작은 쪽 기준)
+    const dc_rel = (a, b, c, d) => Math.abs(a * d - c * b) / Math.min(a * d, c * b);
+    // 큰 줄: 세 자리끼리면 "vs" 대신 쉼표로 16자 안에
+    const dc_main = p => {
+      const s = `${p.A}/${p.B} vs ${p.C}/${p.D}`;
+      return s.length <= 16 ? s : `${p.A}/${p.B}, ${p.C}/${p.D}`;
+    };
+
+    // 자리수 모양: [분자 범위, 분모 범위, 값 범위(천분율)]
+    const dc_SHAPE = {
+      s22: [[10, 99], [12, 99], [150, 950]],       // 37/52
+      s23: [[10, 99], [100, 999], [40, 600]],      // 47/312 (비중)
+      s33: [[100, 999], [120, 999], [200, 950]],   // 372/521
+      b22: [[12, 99], [10, 95], [1050, 2400]],     // 83/71 (1보다 큼)
+      b33: [[110, 999], [100, 950], [1030, 1800]], // 412/385
+    };
+    const dc_first = ([nR, dR, rR]) => { const d = rnd(dR[0], dR[1]); return [Math.round(d * rnd(rR[0], rR[1]) / 1000), d]; };
+    // 두 분수가 모두 1보다 작거나 모두 1보다 큰가 (딱 1인 분수는 빼기)
+    const dc_sameSide = (a, b, c, d) => a !== b && c !== d && (a < b) === (c < d);
+
+    // 함정: 분자·분모가 함께 커진다 (분모 2~30%↑), 값은 0.5~4.5%만 차이 (반올림으로 6.5%까지)
+    function dc_grow(shape) {
+      const [nR, dR] = shape;
+      for (;;) {
+        const [Yn, Yd] = dc_first(shape);
+        const Xd = Yd + Math.max(1, Math.round(Yd * rnd(2, 30) / 100));
+        const Xn = Math.round(Yn * Xd / Yd * (1000 + (coin() ? 1 : -1) * rnd(5, 45)) / 1000);
+        if (!inR(Yn, nR) || !inR(Xn, nR) || Xd > dR[1] || Xn <= Yn || !dc_sameSide(Yn, Yd, Xn, Xd)) continue;
+        const r = dc_rel(Yn, Yd, Xn, Xd);
+        if (r >= 0.004 && r <= 0.065) return [Yn, Yd, Xn, Xd];
+      }
+    }
+
+    // 바로 보이는 문제: 분자는 크고 분모는 작은 쪽
+    function dc_dom(shape) {
+      const [nR, dR] = shape;
+      for (;;) {
+        const [Yn, Yd] = dc_first(shape);
+        const Xn = Yn + rnd(1, Math.max(1, Math.round(Yn * 0.03)));
+        const Xd = Yd - rnd(1, Math.max(1, Math.round(Yd * 0.03)));
+        if (inR(Yn, nR) && inR(Xn, nR) && inR(Xd, dR) && dc_sameSide(Yn, Yd, Xn, Xd) && dc_rel(Yn, Yd, Xn, Xd) <= 0.08) return [Yn, Yd, Xn, Xd];
+      }
+    }
+
+    // 기준값(1/2·1/3·0.7·1 …) 바로 위 하나, 바로 아래 하나 (분자·분모는 같은 방향)
+    const dc_STRADDLE = [[1, 2], [1, 2], [1, 2], [1, 3], [2, 3], [1, 4], [3, 4], [1, 5], [2, 5], [3, 5], [4, 5], [3, 10], [7, 10], [1, 1]];
+    function dc_straddle() {
+      const [bp, bq] = pick(dc_STRADDLE);
+      const [nR, dR] = dc_SHAPE[pick(bp / bq < 0.6 ? ['s22', 's23', 's33'] : ['s22', 's33'])];
+      const lo = Math.max(dR[0], Math.ceil(nR[0] * bq / bp)), hi = Math.min(dR[1], Math.floor(nR[1] * bq / bp));
+      const near = (d, above) => {
+        const k = rnd(1, Math.max(1, Math.round(bp * d / bq * 0.03)));
+        return above ? Math.floor(bp * d / bq) + k : Math.ceil(bp * d / bq) - k;
+      };
+      for (;;) {
+        const d1 = rnd(lo, hi), d2 = rnd(lo, hi), n1 = near(d1, true), n2 = near(d2, false);
+        if (!inR(n1, nR) || !inR(n2, nR) || (n1 - n2) * (d1 - d2) <= 0 || 3 * Math.min(d1, d2) < 2 * Math.max(d1, d2)) continue;
+        const r = dc_rel(n1, d1, n2, d2);
+        if (r >= 0.004 && r <= 0.065) return [n1, d1, n2, d2];
+      }
+    }
+
+    // ---------- 풀이 팁 ----------
+    // n/d 를 소수 둘째 자리로: h = 반올림한 100배 값, exact = 딱 떨어지는가
+    const dc_dec = (n, d) => ({ h: Math.round(n * 100 / d), exact: (n * 100) % d === 0 });
+    const dc_decText = x => `${x.exact ? '=' : '≈'} ${fmt(x.h / 100)}`;
+
+    // 기준값 후보 [p, q] = p/q (앞쪽일수록 쉬운 기준)
+    const dc_BENCH = (() => {
+      const list = [[1, 2], [1, 1]];
+      for (let k = 1; k <= 30; k++) if (k !== 5 && k !== 10) list.push([k, 10]);
+      for (const k of [25, 75, 125, 175, 225, 275]) list.push([k, 100]);
+      list.push([1, 3], [2, 3], [4, 3], [5, 3]);
+      return list;
+    })();
+    const dc_benchName = (bp, bq) => bq === 2 ? '1/2' : bq === 3 ? `${bp}/3` : fmt(bp / bq);
+
+    // 두 분수 사이에 기준값이 있으면: 각각 기준값과 비교하는 줄 + 결론
+    function dc_benchTip(p) {
+      const { A, B, C, D } = p;
+      for (const [bp, bq] of dc_BENCH) {
+        const sa = Math.sign(A * bq - bp * B), sc = Math.sign(C * bq - bp * D);
+        if (!sa || sa !== -sc) continue;
+        const name = dc_benchName(bp, bq);
+        const line = (side, n, d) => {
+          const c = n * bq > bp * d ? '>' : '<';
+          if (bq === 1 && bp === 1) return `${side}: 분자 ${n} ${c} 분모 ${d}`;
+          if (bq === 2) return `${side}: ${n} ${c} ${d} ÷ 2 = ${fmt(d / 2)}`;
+          if (bq === 3) return `${side}: ${n} × 3 = ${n * 3} ${c} ${bp === 1 ? d : `${d} × ${bp} = ${d * bp}`}`;
+          return `${side}: ${n} ${c} ${d} × ${name} = ${fmt(d * bp / bq)}`;
+        };
+        const s = sa > 0 ? '>' : '<';
+        return {
+          nice: bq <= 2 || bq === 10,
+          tip: tip(`${name} 기준`, line('앞', A, B), line('뒤', C, D), `${A}/${B} ${s} ${name} ${s} ${C}/${D} → ${dc_is(dc_side(p))} 커요`),
+        };
+      }
+      return null;
+    }
+
+    // 증가율: 앞 → 뒤로 분자·분모가 몇 % 변했나 (같은 방향일 때). 소수 첫째 자리에서 같으면 둘째 자리까지
+    function dc_pct(from, to, dec) {
+      const num = Math.abs(to - from) * 100 * 10 ** dec;
+      return { r: Math.round(num / from), exact: num % from === 0, dec };
+    }
+    function dc_rateTip(p) {
+      const { A, B, C, D } = p, inc = C > A, word = inc ? '증가' : '감소';
+      for (const dec of [1, 2]) {
+        const n = dc_pct(A, C, dec), d = dc_pct(B, D, dec);
+        if (n.r === d.r) continue;
+        const line = (nm, from, to, x) => `${nm} ${from} → ${to}: ${x.exact ? '' : '약 '}${fmt(x.r / 10 ** x.dec)}% ${word}`;
+        const end = `${n.r > d.r ? '분자' : '분모'}가 더 많이 ${inc ? '늘었' : '줄었'}으니 ${dc_is(dc_side(p))} 커요`;
+        return tip(`${word}율 비교`, line('분자', A, C, n), line('분모', B, D, d), end);
+      }
+      return null;
+    }
+
+    // 차이 분수: 분자·분모가 큰 쪽(X) = 작은 쪽(Y)에 (분자 차)/(분모 차)를 섞은 것.
+    // 차이 분수가 Y보다 크면 X가 Y보다 크고, 작으면 X가 Y보다 작다.
+    function dc_diffTip(p) {
+      const { A, B, C, D } = p, backBig = C > A;
+      const [Yn, Yd, Xn, Xd] = backBig ? [A, B, C, D] : [C, D, A, B];
+      const X = backBig ? '뒤' : '앞', Y = backBig ? '앞' : '뒤';
+      const a = Xn - Yn, b = Xd - Yd, dv = dc_dec(a, b), yv = dc_dec(Yn, Yd);
+      if (dv.h === yv.h) return null;
+      const more = a * Yd > b * Yn, s = more ? '>' : '<';
+      // 약분해서 보기 (12/12 → 1, 2/6 → 1/3)
+      const g = gcd(a, b), red = b === g ? String(a / g) : `${a / g}/${b / g}`;
+      const sub = `차이 (${Xn}−${Yn})/(${Xd}−${Yd}) = ${a}/${b}`;
+      const l1 = red !== `${a}/${b}` && `${sub} = ${red}`.length <= 34 ? `${sub} = ${red}` : sub;
+      const left = b === g ? red : `${red} ${dc_decText(dv)}`, right = `${Yn}/${Yd} ${dc_decText(yv)}`;
+      const l2 = `${left} ${s} ${Y} ${right}`;
+      return tip('차이 분수', l1, l2.length <= 34 ? l2 : `${left} ${s} ${right}`,
+        more ? `차이 분수가 더 크니 ${dc_is(X)} 커요` : `차이 분수가 더 작으니 ${dc_is(X)} 작아요 → ${dc_is(Y)} 커요`);
+    }
+
+    // 분자는 크고 분모는 작으면 계산 없이 끝
+    function dc_domTip(p) {
+      const { A, B, C, D } = p, c = (x, y) => x > y ? '>' : x < y ? '<' : '=';
+      const why = A === C ? '분자가 같으면 분모가 작은 쪽이 커요'
+                : B === D ? '분모가 같으면 분자가 큰 쪽이 커요'
+                : '분자는 크고 분모는 작은 쪽이 커요';
+      return tip('바로 보기', `분자 ${A} ${c(A, C)} ${C}, 분모 ${B} ${c(B, D)} ${D}`, `${why} → ${dc_side(p)}`);
+    }
+
+    function dc_tips(p) {
+      if ((p.C - p.A) * (p.D - p.B) <= 0) return [dc_domTip(p)];
+      const v = dc_benchTip(p), g = dc_rateTip(p), m = dc_diffTip(p);
+      const order = v && v.nice ? [v.tip, g, m] : [g, v && v.tip, m];
+      return order.filter(Boolean).slice(0, 2);
+    }
+
+    TYPES.cmp = {
+      section: 'div', title: '분수 비교', ex: '37/52 vs 41/57', fields: ['A', 'B', 'C', 'D'],
+      gen() {
+        const r = rnd(1, 100);
+        const q = r <= 30 ? dc_grow(dc_SHAPE.s22)
+                : r <= 47 ? dc_grow(dc_SHAPE.s23)
+                : r <= 66 ? dc_grow(dc_SHAPE.s33)
+                : r <= 73 ? dc_grow(dc_SHAPE[pick(['b22', 'b33'])])
+                : r <= 92 ? dc_straddle()
+                : dc_dom(dc_SHAPE[pick(['s22', 's23', 's33'])]);
+        const [A, B, C, D] = coin() ? q : [q[2], q[3], q[0], q[1]];
+        return { t: 'cmp', A, B, C, D };
+      },
+      answer: dc_big,
+      answerText: p => `${dc_side(p)} (${dc_big(p) === 1 ? `${p.A}/${p.B}` : `${p.C}/${p.D}`})`,
+      finalToken: dc_side,
+      choices: p => [`앞 <small>${p.A}/${p.B}</small>`, `뒤 <small>${p.C}/${p.D}</small>`],
+      prompt: p => ({ main: dc_main(p), sub: '어느 쪽이 더 클까요?' }),
+      label: p => `${p.A}/${p.B} vs ${p.C}/${p.D} 중 큰 쪽`,
+      heading: p => `${p.A}/${p.B} ${dc_big(p) === 1 ? '>' : '<'} ${p.C}/${p.D}`,
+      hint: p => {
+        const { A, B, C, D } = p, P = A * D, Q = C * B, tips = dc_tips(p);
+        // 세 자리 곱은 오래 걸려요: 아래 요령(팁)을 먼저 보도록
+        const slow = Math.max(A, B, C, D) >= 100 && tips.length;
+        return {
+          steps: [['대각선', slow ? '분자 × 상대 분모 (세 자리면 아래 요령이 빨라요)' : '분자 × 상대 분모끼리 비교'],
+                  ['앞', `${A} × ${D} = ${P}`],
+                  ['뒤', `${C} × ${B} = ${Q}`],
+                  ['결론', `${P} ${P > Q ? '>' : '<'} ${Q} → ${dc_is(dc_side(p))} 커요`]],
+          tips,
+        };
+      },
+    };
   /* @@EXTENSIONS@@ */
 
   // ---------- 풀이 화면 HTML ----------
