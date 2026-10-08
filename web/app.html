@@ -233,7 +233,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .confirm .no { background: var(--surface); }
 
 /* ---------- section switch / percent ---------- */
-.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
 .seg button { padding: 9px 0; border-radius: 10px; font-weight: 600; color: var(--muted); }
 .seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .level.wide { grid-column: 1 / -1; }
@@ -245,6 +245,18 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .st .k { font: 600 13px var(--font-body); color: var(--muted); white-space: nowrap; padding-right: 14px; }
 .st .v { font: 500 16px var(--font-num); overflow-wrap: anywhere; }
 .st.res .v { color: var(--accent); font-weight: 600; }
+
+/* ---------- choice buttons (compare problems) ---------- */
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice {
+  min-height: clamp(96px, 16vh, 140px); border-radius: 16px; background: var(--surface); border: 1.5px solid var(--line);
+  font: 700 20px var(--font-body); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.choice small { font: 500 15px var(--font-num); color: var(--muted); }
+.choice:active { transform: scale(.97); background: var(--surface-2); }
+.choice.right { border-color: var(--green); background: var(--green-soft); color: var(--green); }
+.choice.picked { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.choice:disabled { cursor: default; }
 
 /* ---------- sheet ---------- */
 .sheet { position: fixed; inset: 0; background: rgb(0 0 0 / .35); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
@@ -297,6 +309,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
       </button>
     </div>
+    <div class="choices" id="q-choices" hidden></div>
     <button class="big-btn" id="q-next" data-act="next" hidden>다음 문제 →</button>
   </section>
 
@@ -312,200 +325,72 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 <script>
 (() => {
-  // ---------- 저장 ----------
-  const KEY = 'gsat99.v1';
-  const PRACTICE = 20, TA_SECONDS = 120;
-  const LEVELS = {
-    teens:    { t: '19단',            a: [11, 19], b: [11, 19] },
-    twoByOne: { t: '두 자리 × 한 자리', a: [11, 99], b: [2, 9] },
-    twoByTwo: { t: '두 자리 × 두 자리', a: [11, 99], b: [11, 99] },
-    custom:   { t: '직접 설정' },
-  };
-  const PCT_TYPES = {
-    mix:    { t: '섞어서',     ex: '여섯 유형 모두' },
-    of:     { t: 'A의 B%',     ex: '340의 15% = 51' },
-    ratio:  { t: '몇 %인가',   ex: '51은 340의 15%' },
-    change: { t: '증감률',     ex: '250 → 290 = 16%↑' },
-    after:  { t: '증감 후 값', ex: '480에서 25%↑ = 600' },
-    base:   { t: '역산',       ex: '15%가 51 → 340' },
-    twice:  { t: '연속 증감',  ex: '+20% → −10% = 108' },
-  };
-  const KINDS = {
-    mult: [['teens', '19단'], ['twoByOne', '두 자리 × 한 자리'], ['twoByTwo', '두 자리 × 두 자리']],
-    pct: [['of', 'A의 B%'], ['ratio', '몇 %인가'], ['change', '증감률'], ['after', '증감 후 값'], ['base', '역산'], ['twice', '연속 증감']],
-  };
+  // ==== ENGINE START ====
+  // 문제 엔진: 화면·저장소를 건드리지 않는 순수 함수들. web/test/engine.test.js 가 이 구간만 잘라서 검사한다.
 
-  const defaults = () => ({
-    records: {}, best: 0, bestPct: 0, section: 'mult', level: 'twoByTwo', pctType: 'mix',
-    custom: { aMin: 11, aMax: 99, bMin: 11, bMax: 19 }, tableN: 11,
-  });
-  let S = defaults();
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) { const d = JSON.parse(raw); S = { ...defaults(), ...d, custom: { ...defaults().custom, ...(d.custom || {}) } }; }
-  } catch (e) {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
-
-  // ---------- 문제 ----------
-  // 곱셈: { t: 'm', a, b }      id "47x38"
-  // 퍼센트: { t: of|ratio|change|after, A, B, dir }   id "of:340:15:1"
-  const pid = p => p.t === 'm' ? `${p.a}x${p.b}` : `${p.t}:${p.A}:${p.B}:${p.dir}`;
-  const parse = id => {
-    if (id.includes(':')) { const [t, A, B, dir] = id.split(':'); return { t, A: +A, B: +B, dir: +dir || 1 }; }
-    const [a, b] = id.split('x').map(Number); return { t: 'm', a, b };
-  };
-  const sectionOf = p => p.t === 'm' ? 'mult' : 'pct';
+  // ---------- 공통 도구 ----------
   const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+  const pick = arr => arr[rnd(0, arr.length - 1)];
+  const coin = (p = 0.5) => Math.random() < p;
   const inR = (v, r) => v >= r[0] && v <= r[1];
   const gcd = (x, y) => y ? gcd(y, x % y) : x;
   const fmt = x => String(+x.toFixed(2));
+  const sg = x => x < 0 ? '−' : '+';
+  const signed = x => `${sg(x)}${Math.abs(x)}%`;
+  const tip = (title, ...lines) => ({ title, lines });
 
-  const delta = p => p.A * p.B / 100;
-  function answer(p) {
-    switch (p.t) {
-      case 'm': return p.a * p.b;
-      case 'of': return delta(p);
-      case 'ratio': case 'change': return p.B;
-      case 'after': return p.A + p.dir * delta(p);
-      case 'base': return p.A;
-      case 'twice': return (100 + p.A) * (100 + p.B) / 100;
-    }
-  }
-  const signed = x => `${x > 0 ? '+' : '−'}${Math.abs(x)}%`;
-  const unit = p => (p.t === 'ratio' || p.t === 'change') ? '%' : '';
-  const up = p => p.dir > 0 ? '증가' : '감소';
+  // 숫자 뒤 조사. 끝자리를 소리 내 읽어 받침이 있는지 본다 (이·사·오·구만 받침 없음; 0은 십·백·천·영 모두 받침)
+  const batchim = n => !'2459'.includes(fmt(n).slice(-1));
+  const eun = n => batchim(n) ? '은' : '는';
+  const ga = n => batchim(n) ? '이' : '가';
+  const eul = n => batchim(n) ? '을' : '를';
+  const wa = n => batchim(n) ? '과' : '와';
 
-  // 화면에 보이는 문제: 큰 줄(main) + 작은 설명(sub)
-  function prompt(p) {
-    switch (p.t) {
-      case 'm': return { main: `${p.a} × ${p.b}`, sub: '' };
-      case 'of': return { main: `${p.A} × ${p.B}%`, sub: `${p.A}의 ${p.B}%는?` };
-      case 'ratio': return { main: `${delta(p)} ÷ ${p.A}`, sub: `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %?` };
-      case 'change': return { main: `${p.A} → ${answer({ ...p, t: 'after' })}`, sub: `${up(p)}율은 몇 %?` };
-      case 'after': return { main: `${p.A} ${p.dir > 0 ? '+' : '−'}${p.B}%`, sub: `${p.A}에서 ${p.B}% ${up(p)}하면?` };
-      case 'base': return { main: `? × ${p.B}% = ${delta(p)}`, sub: `${p.B}%가 ${delta(p)}인 수는?` };
-      case 'twice': return { main: `${signed(p.A)} → ${signed(p.B)}`, sub: '처음을 100이라 하면 결과는?' };
-    }
-  }
-  // 숫자 뒤 은/는: 끝자리 2·4·5·9(이·사·오·구)만 받침이 없다
-  const eun = n => [2, 4, 5, 9].includes(n % 10) ? '는' : '은';
-  function label(p) {
-    switch (p.t) {
-      case 'm': return `${p.a} × ${p.b}`;
-      case 'of': return `${p.A}의 ${p.B}%`;
-      case 'ratio': return `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %`;
-      case 'change': return `${p.A} → ${answer({ ...p, t: 'after' })} ${up(p)}율`;
-      case 'after': return `${p.A}에서 ${p.B}% ${up(p)}`;
-      case 'base': return `${p.B}%가 ${delta(p)}인 수`;
-      case 'twice': return `100 → ${signed(p.A)} → ${signed(p.B)}`;
-    }
-  }
-  const answerText = p => `${answer(p)}${unit(p)}`;
+  // ---------- 유형 등록부 ----------
+  // TYPES[t] = {
+  //   section: 'mult' | 'div' | 'pct',  title, ex(홈 버튼 예시),
+  //   fields: id에 저장할 숫자 필드 이름 (기본 ['A','B','dir']),
+  //   gen() → 문제 p ({ t, ...fields }),  answer(p) → 1~99999 정수,
+  //   unit?: '%' 또는 (p) => 단위,  answerText?(p), heading?(p) (풀이 제목, 기본 "label → 정답"),
+  //   prompt(p) → { main(큰 줄), sub(설명) },  label(p) → 목록에 쓰는 한 줄,
+  //   hint(p) → { grid?, steps?: [[머리, 내용], ...] (마지막 줄 = 결론), tips?: [{ title, lines }] },
+  //   finalToken?(p) → 마지막 풀이 줄에 꼭 들어갈 글자 (기본: 정답 숫자),
+  //   choices?(p) → ['앞', '뒤'] 처럼 고르는 문제의 버튼 (정답은 1부터 센 번호),
+  //   accept?(p, v) → 어림 문제처럼 정답 범위가 있을 때,
+  // }
+  const TYPES = {};
+  const fieldsOf = t => (TYPES[t] && TYPES[t].fields) || ['A', 'B', 'dir'];
+  const typeList = section => Object.keys(TYPES).filter(t => t !== 'm' && TYPES[t].section === section);
 
-  // 정수로 떨어지는 퍼센트 문제 만들기.
-  // A는 두 자리~네 자리까지 고루, B는 5의 배수 반·아무 수 반으로 섞어 겹치지 않게 한다.
-  const ALL_PCT = ['of', 'ratio', 'change', 'after', 'base', 'twice'];
-  function pickA(m) {
-    const r = Math.random();
-    const [lo, hi] = r < 0.15 ? [20, 99] : r < 0.65 ? [100, 999] : [1000, 9990];
-    const kLo = Math.ceil(lo / m), kHi = Math.floor(hi / m);
-    return kLo <= kHi ? m * rnd(kLo, kHi) : m * rnd(Math.ceil(100 / m), Math.floor(9990 / m));
+  // 곱셈은 "47x38", 나머지는 "of:340:15:1" 처럼 저장
+  const pid = p => p.t === 'm' ? `${p.a}x${p.b}` : [p.t, ...fieldsOf(p.t).map(f => p[f])].join(':');
+  function parse(id) {
+    if (!id.includes(':')) { const [a, b] = id.split('x').map(Number); return { t: 'm', a, b }; }
+    const [t, ...nums] = id.split(':');
+    const p = { t };
+    fieldsOf(t).forEach((f, i) => { p[f] = Number(nums[i]); });
+    return p;
   }
-  function genPct(type) {
-    const t = type === 'mix' ? ALL_PCT[rnd(0, ALL_PCT.length - 1)] : type;
-    if (t === 'twice') {
-      // 10의 배수끼리면 (100+a)(100+b)/100 이 정수
-      const a = 10 * rnd(1, 5) * (Math.random() < 0.5 ? 1 : -1);
-      const b = 5 * rnd(1, 10) * (Math.random() < 0.5 ? 1 : -1);
-      const a2 = Math.abs(b) % 10 ? 20 * rnd(1, 2) * Math.sign(a) : a;   // b가 5의 홀수배면 a는 20의 배수
-      if ((100 + a2) * (100 + b) === 10000) return genPct(t);   // 결과가 그대로 100이면 다시
-      return { t, A: a2, B: b, dir: 1 };
-    }
-    const dir = (t === 'change' || t === 'after') && Math.random() < 0.4 ? -1 : 1;
-    const maxB = dir < 0 ? 60 : 95;
-    const B = Math.random() < 0.5 ? 5 * rnd(1, maxB / 5) : rnd(1, maxB);
-    const m = 100 / gcd(B, 100);              // A가 m의 배수면 A×B/100이 정수
-    return { t, A: pickA(m), B, dir };
-  }
+  const knownId = id => !!TYPES[id.includes(':') ? id.split(':')[0] : 'm'];
 
-  // ---------- 기록 ----------
-  const weakness = r => r.w * 2 / (r.c + 1);
-  const isWeak = p => { const r = S.records[pid(p)]; return !!r && r.w > 0 && weakness(r) >= 0.5; };
-  const weakList = section => Object.entries(S.records)
-    .filter(([k, r]) => r.w > 0 && weakness(r) >= 0.5 && (!section || sectionOf(parse(k)) === section))
-    .sort((x, y) => weakness(y[1]) - weakness(x[1]) || x[0].localeCompare(y[0]))
-    .map(([k]) => parse(k));
-  const kindOf = p => p.t !== 'm' ? p.t
-    : (inR(p.a, [11, 19]) && inR(p.b, [11, 19])) ? 'teens' : (p.a < 10 || p.b < 10) ? 'twoByOne' : 'twoByTwo';
+  const answer = p => TYPES[p.t].answer(p);
+  const unit = p => { const u = TYPES[p.t].unit; return typeof u === 'function' ? u(p) : (u || ''); };
+  const answerText = p => TYPES[p.t].answerText ? TYPES[p.t].answerText(p) : `${answer(p)}${unit(p)}`;
+  const prompt = p => TYPES[p.t].prompt(p);
+  const label = p => TYPES[p.t].label(p);
+  const hint = p => TYPES[p.t].hint(p);
+  const sectionOf = p => TYPES[p.t].section;
+  const choices = p => TYPES[p.t].choices ? TYPES[p.t].choices(p) : null;
+  const accepts = (p, v) => TYPES[p.t].accept ? TYPES[p.t].accept(p, v) : v === answer(p);
+  const calcTitle = p => TYPES[p.t].heading ? TYPES[p.t].heading(p) : `${label(p)} → ${answerText(p)}`;
+  const finalToken = p => TYPES[p.t].finalToken ? TYPES[p.t].finalToken(p) : String(answer(p));
+  const genType = t => TYPES[t].gen();
+  const genSection = (section, type) => genType(type === 'mix' ? pick(typeList(section)) : type);
 
-  function record(p, ok, secs) {
-    const r = S.records[pid(p)] || (S.records[pid(p)] = { c: 0, w: 0, t: 0 });
-    if (ok) { r.c++; r.t += secs; } else { r.w++; }
-    save();
-  }
-
-  function ranges() {
-    const L = LEVELS[S.level];
-    if (L.a) return { a: L.a, b: L.b };
-    const c = S.custom;
-    return {
-      a: [Math.max(11, Math.min(c.aMin, c.aMax)), Math.max(11, c.aMin, c.aMax)],
-      b: [Math.min(c.bMin, c.bMax), Math.max(c.bMin, c.bMax)],
-    };
-  }
-
-  // pool: { list } | { a, b } (곱셈 범위) | { pct: type }
-  // 한 번 푼 세션 안에서는 같은 문제를 다시 내지 않는다. 문제 수가 적은 범위(19단 등)는
-  // 전부 섞어 놓고 하나씩 뽑고, 다 쓰면 다시 섞는다.
-  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = rnd(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  function makePicker(pool) {
-    const seen = new Set();
-    let bag = [], weakUsed = 0;
-    const fits = x => pool.pct ? (x.t !== 'm' && (pool.pct === 'mix' || x.t === pool.pct))
-                               : (x.t === 'm' && inR(x.a, pool.a) && inR(x.b, pool.b));
-    const size = pool.a ? (pool.a[1] - pool.a[0] + 1) * (pool.b[1] - pool.b[0] + 1) : Infinity;
-    const all = () => {
-      const out = [];
-      for (let a = pool.a[0]; a <= pool.a[1]; a++) for (let b = pool.b[0]; b <= pool.b[1]; b++) out.push({ t: 'm', a, b });
-      return out;
-    };
-    const fromBag = make => {
-      if (!bag.length) { bag = shuffle(make().filter(x => !seen.has(pid(x)))); if (!bag.length) { seen.clear(); bag = shuffle(make()); } }
-      return bag.pop();
-    };
-    const fresh = () => {
-      if (size <= 400) return fromBag(all);
-      for (let i = 0; i < 50; i++) {
-        const p = pool.pct ? genPct(pool.pct) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
-        if (!seen.has(pid(p))) return p;
-      }
-      return pool.pct ? genPct(pool.pct) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
-    };
-    return {
-      next() {
-        let p;
-        if (pool.list) {
-          p = fromBag(() => pool.list);   // 오답 복습: 약한 문제를 한 번씩
-        } else {
-          // 약한 문제는 가끔(15%), 세션당 최대 5개, 이번 세션에 안 나온 것만
-          const weak = weakUsed < 5 ? weakList().filter(x => fits(x) && !seen.has(pid(x))) : [];
-          if (weak.length && Math.random() < 0.15) {
-            p = weak[rnd(0, Math.min(weak.length, 10) - 1)];
-            weakUsed++;
-            bag = bag.filter(x => pid(x) !== pid(p));
-          } else {
-            p = fresh();
-          }
-        }
-        seen.add(pid(p));
-        return p;
-      },
-    };
-  }
-
-  // ---------- 손계산: 곱셈 세로셈 ----------
-  function handCalc(p) {
-    const top = Math.max(p.a, p.b), bot = Math.min(p.a, p.b);
+  // ---------- 곱셈 ----------
+  // 세로셈 줄들: 위 수 × 아래 수, 부분곱(자리 올림만큼 오른쪽을 비움), 합
+  function multGrid(a, b) {
+    const top = Math.max(a, b), bot = Math.min(a, b);
     const parts = String(bot).split('').reverse().map(Number).map((d, i) => ({ d, i })).filter(x => x.d);
     const rows = [{ pre: '', s: String(top), sh: 0 }, { pre: '×', s: String(bot), sh: 0, ruled: true }];
     if (parts.length <= 1) {
@@ -515,33 +400,53 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       rows.push({ pre: '', s: String(top * bot), sh: 0, res: true });
     }
     const width = Math.max(...rows.map(r => r.s.length + r.sh));
-    let mental = null;
+    return { rows, width };
+  }
+
+  // 암산 팁: 앞쪽일수록 더 쓸모 있는 요령 (아래 곱셈 확장에서 더 많은 요령으로 바꿔 끼운다)
+  let multTips = function (a, b) {
+    const top = Math.max(a, b), bot = Math.min(a, b), tips = [];
+    const parts = String(bot).split('').reverse().map(Number).map((d, i) => ({ d, i })).filter(x => x.d);
     if (parts.length > 1) {
       const terms = parts.slice().reverse().map(x => [x.d * 10 ** x.i, top * x.d * 10 ** x.i]);
-      mental = [`${top}×${terms.map(t => t[0]).join(` + ${top}×`)}`, `= ${terms.map(t => t[1]).join(' + ')} = ${top * bot}`];
+      tips.push(tip('암산 팁', `${top}×${terms.map(t => t[0]).join(` + ${top}×`)}`, `= ${terms.map(t => t[1]).join(' + ')} = ${top * bot}`));
     } else if (top >= 10 && bot > 1 && top % 10) {
       const t = Math.floor(top / 10) * 10, o = top % 10;
-      mental = [`${t}×${bot} + ${o}×${bot}`, `= ${t * bot} + ${o * bot} = ${top * bot}`];
+      tips.push(tip('암산 팁', `${t}×${bot} + ${o}×${bot}`, `= ${t * bot} + ${o * bot} = ${top * bot}`));
     }
-    return { rows, width, mental };
-  }
+    return tips;
+  };
+  const multSplitTips = multTips;   // 기본 "쪼개서 곱하기" 팁 (확장이 재사용)
 
-  function multCalcHTML(p) {
-    const h = handCalc(p);
-    const grid = h.rows.map(r => {
-      const cells = [`<i class="op">${r.pre}</i>`, '<i></i>'];
-      for (let k = 0; k < h.width - r.s.length - r.sh; k++) cells.push('<i></i>');
-      for (const ch of r.s) cells.push(`<i>${ch}</i>`);
-      for (let k = 0; k < r.sh; k++) cells.push('<i class="dim">0</i>');
-      return `<div class="hc-row${r.ruled ? ' ruled' : ''}${r.res ? ' res' : ''}">${cells.join('')}</div>`;
-    }).join('');
-    const notes = h.rows.map(r => `<div class="hc-note">${r.note || ''}</div>`).join('');
-    const tip = h.mental ? `<div class="tip"><b>암산 팁</b><span>${h.mental[0]}</span><span>${h.mental[1]}</span></div>` : '';
-    return `<div class="hc" aria-label="${p.a} 곱하기 ${p.b} 세로셈"><div class="hc-grid">${grid}</div><div class="hc-notes">${notes}</div></div>${tip}`;
-  }
+  TYPES.m = {
+    section: 'mult', title: '곱셈',
+    gen: () => ({ t: 'm', a: rnd(11, 99), b: rnd(11, 99) }),
+    answer: p => p.a * p.b,
+    prompt: p => ({ main: `${p.a} × ${p.b}`, sub: '' }),
+    label: p => `${p.a} × ${p.b}`,
+    heading: p => `${p.a} × ${p.b} = ${p.a * p.b}`,
+    hint: p => ({ grid: multGrid(p.a, p.b), tips: multTips(p.a, p.b) }),
+  };
 
-  // ---------- 손계산: 퍼센트 (10% / 1% 쪼개기) ----------
-  const FRACTIONS = { 10: '1/10', 20: '1/5', 25: '1/4', 40: '2/5', 50: '1/2', 60: '3/5', 75: '3/4', 80: '4/5', 5: '1/20' };
+  // ---------- 퍼센트 ----------
+  const FRACTIONS = { 5: '1/20', 10: '1/10', 20: '1/5', 25: '1/4', 40: '2/5', 50: '1/2', 60: '3/5', 75: '3/4', 80: '4/5' };
+
+  // A가 m의 배수면 A×B/100 이 정수. A는 두 자리~네 자리까지 고루.
+  function pickA(m) {
+    const r = Math.random();
+    const [lo, hi] = r < 0.15 ? [20, 99] : r < 0.65 ? [100, 999] : [1000, 9990];
+    const kLo = Math.ceil(lo / m), kHi = Math.floor(hi / m);
+    return kLo <= kHi ? m * rnd(kLo, kHi) : m * rnd(Math.ceil(100 / m), Math.floor(9990 / m));
+  }
+  // B는 5의 배수 반·아무 수 반. signed면 40% 확률로 감소(dir = −1, B ≤ 60)
+  function pctAB(signedDir = false) {
+    const dir = signedDir && coin(0.4) ? -1 : 1;
+    const maxB = dir < 0 ? 60 : 95;
+    const B = coin() ? 5 * rnd(1, maxB / 5) : rnd(1, maxB);
+    return { A: pickA(100 / gcd(B, 100)), B, dir };
+  }
+  const delta = p => p.A * p.B / 100;
+  const up = p => p.dir > 0 ? '증가' : '감소';
 
   // base의 B% 를 10%, 1% 덩어리로 세는 줄들
   function chunkLines(base, B) {
@@ -556,64 +461,257 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       [`${B}%`, `${terms.join(' + ')} = ${sum}${fmt(base * B / 100)}`],
     ];
   }
+  const chunkTerms = (base, B) => chunkLines(base, B)[2][1].split(' = ')[0];
 
-  function pctSteps(p) {
-    const d = delta(p), frac = FRACTIONS[p.B];
-    let lines = [], tip = null;
-    switch (p.t) {
-      case 'of':
-        lines = chunkLines(p.A, p.B);
-        if (frac) tip = `${p.B}% = ${frac} → ${p.A} × ${frac} = ${fmt(d)}`;
-        break;
-      case 'ratio':
-        lines = [['식', `${fmt(d)} ÷ ${p.A} × 100`], ...chunkLines(p.A, p.B).slice(0, 2),
-                 ['세기', `${fmt(d)} = ${chunkLines(p.A, p.B)[2][1].split(' = ')[0]} → ${p.B}%`]];
-        if (frac) tip = `${fmt(d)} ÷ ${p.A} = ${frac} = ${p.B}%`;
-        break;
-      case 'change': {
-        const after = p.A + p.dir * d;
-        lines = [['차이', `${p.dir > 0 ? `${after} − ${p.A}` : `${p.A} − ${after}`} = ${fmt(d)}`],
-                 ['식', `${fmt(d)} ÷ ${p.A} (처음 값) × 100`], ...chunkLines(p.A, p.B).slice(0, 2),
-                 ['세기', `${fmt(d)} = ${chunkLines(p.A, p.B)[2][1].split(' = ')[0]} → ${p.B}% ${up(p)}`]];
-        tip = '증감률은 항상 처음 값(기준)으로 나눠요';
-        break;
+  // "A의 B% = B의 A%" 뒤집기 팁 (뒤집는 게 더 쉬울 때만). 아래 퍼센트 확장에서 채운다.
+  let swapTip = (A, B) => null;
+
+  TYPES.of = {
+    section: 'pct', title: 'A의 B%', ex: '340의 15% = 51',
+    gen: () => ({ t: 'of', ...pctAB() }),
+    answer: delta,
+    prompt: p => ({ main: `${p.A} × ${p.B}%`, sub: `${p.A}의 ${p.B}%는?` }),
+    label: p => `${p.A}의 ${p.B}%`,
+    hint: p => {
+      const tips = [], frac = FRACTIONS[p.B], s = swapTip(p.A, p.B);
+      if (s) tips.push(s);
+      if (frac) tips.push(tip('분수 팁', `${p.B}% = ${frac} → ${p.A} × ${frac} = ${fmt(delta(p))}`));
+      return { steps: chunkLines(p.A, p.B), tips };
+    },
+  };
+
+  TYPES.ratio = {
+    section: 'pct', title: '몇 %인가', ex: '51은 340의 15%', unit: '%',
+    gen: () => ({ t: 'ratio', ...pctAB() }),
+    answer: p => p.B,
+    prompt: p => ({ main: `${delta(p)} ÷ ${p.A}`, sub: `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %?` }),
+    label: p => `${delta(p)}${eun(delta(p))} ${p.A}의 몇 %`,
+    hint: p => {
+      const d = delta(p), frac = FRACTIONS[p.B];
+      return {
+        steps: [['식', `${fmt(d)} ÷ ${p.A} × 100`], ...chunkLines(p.A, p.B).slice(0, 2), ['세기', `${fmt(d)} = ${chunkTerms(p.A, p.B)} → ${p.B}%`]],
+        tips: frac ? [tip('분수 팁', `${fmt(d)} ÷ ${p.A} = ${frac} = ${p.B}%`)] : [],
+      };
+    },
+  };
+
+  TYPES.change = {
+    section: 'pct', title: '증감률', ex: '250 → 290 = 16%↑', unit: '%',
+    gen: () => ({ t: 'change', ...pctAB(true) }),
+    answer: p => p.B,
+    prompt: p => ({ main: `${p.A} → ${p.A + p.dir * delta(p)}`, sub: `${up(p)}율은 몇 %?` }),
+    label: p => `${p.A} → ${p.A + p.dir * delta(p)} ${up(p)}율`,
+    hint: p => {
+      const d = delta(p), after = p.A + p.dir * d;
+      return {
+        steps: [['차이', `${p.dir > 0 ? `${after} − ${p.A}` : `${p.A} − ${after}`} = ${fmt(d)}`],
+                ['식', `${fmt(d)} ÷ ${p.A} (처음 값) × 100`], ...chunkLines(p.A, p.B).slice(0, 2),
+                ['세기', `${fmt(d)} = ${chunkTerms(p.A, p.B)} → ${p.B}% ${up(p)}`]],
+        tips: [tip('주의', '증감률은 항상 처음 값(기준)으로 나눠요')],
+      };
+    },
+  };
+
+  TYPES.after = {
+    section: 'pct', title: '증감 후 값', ex: '480에서 25%↑ = 600',
+    gen: () => ({ t: 'after', ...pctAB(true) }),
+    answer: p => p.A + p.dir * delta(p),
+    prompt: p => ({ main: `${p.A} ${sg(p.dir)}${p.B}%`, sub: `${p.A}에서 ${p.B}% ${up(p)}하면?` }),
+    label: p => `${p.A}에서 ${p.B}% ${up(p)}`,
+    hint: p => ({
+      steps: [...chunkLines(p.A, p.B), [up(p), `${p.A} ${sg(p.dir)} ${fmt(delta(p))} = ${fmt(answer(p))}`]],
+      tips: [tip('한 번에', `${p.A} × ${fmt(1 + p.dir * p.B / 100)} = ${fmt(answer(p))}`)],
+    }),
+  };
+
+  TYPES.base = {
+    section: 'pct', title: '역산', ex: '15%가 51 → 340',
+    gen: () => ({ t: 'base', ...pctAB() }),
+    answer: p => p.A,
+    prompt: p => ({ main: `? × ${p.B}% = ${delta(p)}`, sub: `${p.B}%가 ${delta(p)}인 수는?` }),
+    label: p => `${p.B}%가 ${delta(p)}인 수`,
+    hint: p => {
+      const d = delta(p), one = d / p.B, frac = FRACTIONS[p.B];
+      const steps = [['식', `${fmt(d)} ÷ ${p.B}% = ${fmt(d)} ÷ ${p.B} × 100`], ['1%', `${fmt(d)} ÷ ${p.B} = ${fmt(one)}`], ['100%', `${fmt(one)} × 100 = ${p.A}`]];
+      if (p.B % 10 === 0) steps.splice(1, 0, ['10%', `${fmt(d)} ÷ ${p.B / 10} = ${fmt(d / (p.B / 10))}`]);
+      return { steps, tips: frac ? [tip('분수 팁', `${p.B}% = ${frac} → ${fmt(d)} ÷ (${frac}) = ${p.A}`)] : [] };
+    },
+  };
+
+  TYPES.twice = {
+    section: 'pct', title: '연속 증감', ex: '+20% → −10% = 108',
+    gen() {
+      // 10의 배수끼리면 (100+a)(100+b)/100 이 정수. b가 5의 홀수배면 a는 20의 배수
+      for (;;) {
+        const a = 10 * rnd(1, 5) * (coin() ? 1 : -1);
+        const b = 5 * rnd(1, 10) * (coin() ? 1 : -1);
+        const a2 = Math.abs(b) % 10 ? 20 * rnd(1, 2) * Math.sign(a) : a;
+        if ((100 + a2) * (100 + b) !== 10000) return { t: 'twice', A: a2, B: b, dir: 1 };
       }
-      case 'after':
-        lines = [...chunkLines(p.A, p.B), [up(p), `${p.A} ${p.dir > 0 ? '+' : '−'} ${fmt(d)} = ${fmt(answer(p))}`]];
-        tip = `한 번에: ${p.A} × ${fmt(1 + p.dir * p.B / 100)} = ${fmt(answer(p))}`;
-        break;
-      case 'base': {
-        const one = d / p.B;
-        lines = [['식', `${fmt(d)} ÷ ${p.B}% = ${fmt(d)} ÷ ${p.B} × 100`], ['1%', `${fmt(d)} ÷ ${p.B} = ${fmt(one)}`], ['100%', `${fmt(one)} × 100 = ${p.A}`]];
-        if (p.B % 10 === 0) lines.splice(1, 0, ['10%', `${fmt(d)} ÷ ${p.B / 10} = ${fmt(d / (p.B / 10))}`]);
-        if (frac) tip = `${p.B}% = ${frac} → ${fmt(d)} ÷ (${frac}) = ${p.A}`;
-        break;
-      }
-      case 'twice': {
-        const mid = 100 + p.A, ans = answer(p), step2 = mid * Math.abs(p.B) / 100;
-        const sg = x => x > 0 ? '+' : '−';
-        lines = [['처음', '100'],
-                 ['1단계', `100 ${sg(p.A)} ${Math.abs(p.A)} = ${mid}`],
-                 ['2단계', `${mid}의 ${Math.abs(p.B)}% = ${fmt(step2)}`],
-                 ['', `${mid} ${sg(p.B)} ${fmt(step2)} = ${fmt(ans)}`],
-                 ['결과', `${fmt(ans)} → 처음보다 ${fmt(Math.abs(ans - 100))}% ${ans >= 100 ? '증가' : '감소'}`]];
-        const pr = x => x < 0 ? `(−${fmt(-x)})` : fmt(x);
-        tip = `그냥 더하면 안 돼요: ${pr(p.A)} + ${pr(p.B)} + ${pr(p.A)}×${pr(p.B)}÷100 = ${ans < 100 ? '−' : '+'}${fmt(Math.abs(ans - 100))}%`;
-        break;
-      }
+    },
+    answer: p => (100 + p.A) * (100 + p.B) / 100,
+    prompt: p => ({ main: `${signed(p.A)} → ${signed(p.B)}`, sub: '처음을 100이라 하면 결과는?' }),
+    label: p => `100 → ${signed(p.A)} → ${signed(p.B)}`,
+    hint: p => {
+      const mid = 100 + p.A, ans = answer(p), step2 = mid * Math.abs(p.B) / 100;
+      const pr = x => x < 0 ? `(−${fmt(-x)})` : fmt(x);
+      return {
+        steps: [['처음', '100'],
+                ['1단계', `100 ${sg(p.A)} ${Math.abs(p.A)} = ${mid}`],
+                ['2단계', `${mid}의 ${Math.abs(p.B)}% = ${fmt(step2)}`],
+                ['', `${mid} ${sg(p.B)} ${fmt(step2)} = ${fmt(ans)}`],
+                ['결과', `${fmt(ans)} → 처음보다 ${fmt(Math.abs(ans - 100))}% ${ans >= 100 ? '증가' : '감소'}`]],
+        tips: [tip('주의', `그냥 더하면 안 돼요: ${pr(p.A)} + ${pr(p.B)} + ${pr(p.A)}×${pr(p.B)}÷100 = ${ans < 100 ? '−' : '+'}${fmt(Math.abs(ans - 100))}%`)],
+      };
+    },
+  };
+
+  // ---------- 확장 유형 (여기 아래에 추가) ----------
+  /* @@EXTENSIONS@@ */
+
+  // ---------- 풀이 화면 HTML ----------
+  function gridHTML(g, aria) {
+    const rows = g.rows.map(r => {
+      const cells = [`<i class="op">${r.pre}</i>`, '<i></i>'];
+      for (let k = 0; k < g.width - r.s.length - r.sh; k++) cells.push('<i></i>');
+      for (const ch of r.s) cells.push(`<i>${ch}</i>`);
+      for (let k = 0; k < r.sh; k++) cells.push('<i class="dim">0</i>');
+      return `<div class="hc-row${r.ruled ? ' ruled' : ''}${r.res ? ' res' : ''}">${cells.join('')}</div>`;
+    }).join('');
+    const notes = g.rows.map(r => `<div class="hc-note">${r.note || ''}</div>`).join('');
+    return `<div class="hc" aria-label="${aria}"><div class="hc-grid">${rows}</div><div class="hc-notes">${notes}</div></div>`;
+  }
+  function hintHTML(p) {
+    const h = hint(p);
+    let html = '';
+    if (h.grid) html += gridHTML(h.grid, label(p));
+    if (h.steps && h.steps.length) {
+      html += `<div class="steps">${h.steps.map(([k, v], i) =>
+        `<div class="st${i === h.steps.length - 1 ? ' res' : ''}"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>`;
     }
-    return { lines, tip };
+    for (const t of h.tips || []) html += `<div class="tip"><b>${t.title}</b>${t.lines.map(l => `<span>${l}</span>`).join('')}</div>`;
+    return html;
+  }
+  // ==== ENGINE END ====
+
+  // ---------- 저장 ----------
+  const KEY = 'gsat99.v1';
+  const PRACTICE = 20, TA_SECONDS = 120;
+  const SECTIONS = [['mult', '곱셈'], ['div', '나눗셈'], ['pct', '퍼센트']];
+  const LEVELS = {
+    teens:      { t: '19단',              a: [11, 19],   b: [11, 19] },
+    squares:    { t: '제곱수',            a: [11, 99],   sq: true },
+    twoByOne:   { t: '두 자리 × 한 자리',  a: [11, 99],   b: [2, 9] },
+    twoByTwo:   { t: '두 자리 × 두 자리',  a: [11, 99],   b: [11, 99] },
+    threeByOne: { t: '세 자리 × 한 자리',  a: [101, 999], b: [2, 9] },
+    custom:     { t: '직접 설정' },
+  };
+  const MULT_KINDS = [['teens', '19단'], ['squares', '제곱수'], ['twoByOne', '두 자리 × 한 자리'], ['twoByTwo', '두 자리 × 두 자리'], ['threeByOne', '세 자리 × 한 자리']];
+
+  const defaults = () => ({
+    records: {}, bests: { mult: 0, div: 0, pct: 0 }, section: 'mult', level: 'twoByTwo', types: { div: 'mix', pct: 'mix' },
+    custom: { aMin: 11, aMax: 99, bMin: 11, bMax: 19 }, tableN: 11,
+  });
+  let S = defaults();
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const d = JSON.parse(raw), def = defaults();
+      S = { ...def, ...d, custom: { ...def.custom, ...(d.custom || {}) }, types: { ...def.types, ...(d.types || {}) }, bests: { ...def.bests, ...(d.bests || {}) } };
+      // 예전 저장 형식 옮기기
+      if (d.best && !(d.bests && d.bests.mult)) S.bests.mult = d.best;
+      if (d.bestPct && !(d.bests && d.bests.pct)) S.bests.pct = d.bestPct;
+      if (d.pctType && !(d.types && d.types.pct)) S.types.pct = d.pctType;
+      delete S.best; delete S.bestPct; delete S.pctType;
+    }
+  } catch (e) {}
+  // 유형이 하나도 없는 영역은 탭을 숨긴다
+  const liveSections = () => SECTIONS.filter(([k]) => k === 'mult' || typeList(k).length);
+  if (!liveSections().some(([k]) => k === S.section)) S.section = 'mult';
+  if (!LEVELS[S.level]) S.level = 'twoByTwo';
+  for (const sec of ['div', 'pct']) if (S.types[sec] !== 'mix' && !(TYPES[S.types[sec]] && TYPES[S.types[sec]].section === sec)) S.types[sec] = 'mix';
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  // ---------- 기록 ----------
+  const weakness = r => r.w * 2 / (r.c + 1);
+  const isWeak = p => { const r = S.records[pid(p)]; return !!r && r.w > 0 && weakness(r) >= 0.5; };
+  const weakList = section => Object.entries(S.records)
+    .filter(([k, r]) => knownId(k) && r.w > 0 && weakness(r) >= 0.5 && (!section || sectionOf(parse(k)) === section))
+    .sort((x, y) => weakness(y[1]) - weakness(x[1]) || x[0].localeCompare(y[0]))
+    .map(([k]) => parse(k));
+  const kindOf = p => p.t !== 'm' ? p.t
+    : (inR(p.a, [11, 19]) && inR(p.b, [11, 19])) ? 'teens'
+    : p.a === p.b ? 'squares'
+    : Math.max(p.a, p.b) >= 100 ? 'threeByOne'
+    : (p.a < 10 || p.b < 10) ? 'twoByOne' : 'twoByTwo';
+
+  function record(p, ok, secs) {
+    const r = S.records[pid(p)] || (S.records[pid(p)] = { c: 0, w: 0, t: 0 });
+    if (ok) { r.c++; r.t += secs; } else { r.w++; }
+    save();
   }
 
-  function pctCalcHTML(p) {
-    const s = pctSteps(p);
-    const rows = s.lines.map(([k, v], i) =>
-      `<div class="st${i === s.lines.length - 1 ? ' res' : ''}"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
-    return `<div class="steps">${rows}</div>${s.tip ? `<div class="tip"><b>팁</b><span>${s.tip}</span></div>` : ''}`;
+  function ranges() {
+    const L = LEVELS[S.level];
+    if (L.sq) return { a: L.a, b: L.a, sq: true };
+    if (L.a) return { a: L.a, b: L.b };
+    const c = S.custom;
+    return {
+      a: [Math.max(11, Math.min(c.aMin, c.aMax)), Math.max(11, c.aMin, c.aMax)],
+      b: [Math.min(c.bMin, c.bMax), Math.max(c.bMin, c.bMax)],
+    };
   }
+  const rangeText = r => r.sq ? `${r.a[0]}² ~ ${r.a[1]}²` : `${r.a[0]}~${r.a[1]} × ${r.b[0]}~${r.b[1]}`;
 
-  const calcHTML = p => p.t === 'm' ? multCalcHTML(p) : pctCalcHTML(p);
-  const calcTitle = p => p.t === 'm' ? `${p.a} × ${p.b} = ${answer(p)}` : `${label(p)} → ${answerText(p)}`;
+  // pool: { list } (오답 복습) | { a, b, sq? } (곱셈 범위) | { section, type } (나눗셈·퍼센트)
+  // 한 세션 안에서는 같은 문제를 다시 내지 않는다. 문제 수가 적은 범위(19단 등)는
+  // 전부 섞어 놓고 하나씩 뽑고, 다 쓰면 다시 섞는다.
+  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = rnd(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  function makePicker(pool) {
+    const seen = new Set();
+    let bag = [], weakUsed = 0;
+    const fits = x => pool.section ? (x.t !== 'm' && sectionOf(x) === pool.section && (pool.type === 'mix' || x.t === pool.type))
+                                   : (x.t === 'm' && inR(x.a, pool.a) && inR(x.b, pool.b) && (!pool.sq || x.a === x.b));
+    const size = pool.a ? (pool.sq ? pool.a[1] - pool.a[0] + 1 : (pool.a[1] - pool.a[0] + 1) * (pool.b[1] - pool.b[0] + 1)) : Infinity;
+    const all = () => {
+      const out = [];
+      for (let a = pool.a[0]; a <= pool.a[1]; a++) {
+        if (pool.sq) { out.push({ t: 'm', a, b: a }); continue; }
+        for (let b = pool.b[0]; b <= pool.b[1]; b++) out.push({ t: 'm', a, b });
+      }
+      return out;
+    };
+    const fromBag = make => {
+      if (!bag.length) { bag = shuffle(make().filter(x => !seen.has(pid(x)))); if (!bag.length) { seen.clear(); bag = shuffle(make()); } }
+      return bag.pop();
+    };
+    const gen = () => pool.section ? genSection(pool.section, pool.type) : { t: 'm', a: rnd(...pool.a), b: rnd(...pool.b) };
+    const fresh = () => {
+      if (size <= 400) return fromBag(all);
+      for (let i = 0; i < 50; i++) { const p = gen(); if (!seen.has(pid(p))) return p; }
+      return gen();
+    };
+    return {
+      next() {
+        let p;
+        if (pool.list) {
+          p = fromBag(() => pool.list);   // 오답 복습: 약한 문제를 한 번씩
+        } else {
+          // 약한 문제는 가끔(15%), 세션당 최대 5개, 이번 세션에 안 나온 것만
+          const weak = weakUsed < 5 ? weakList().filter(x => fits(x) && !seen.has(pid(x))) : [];
+          if (weak.length && coin(0.15)) {
+            p = weak[rnd(0, Math.min(weak.length, 10) - 1)];
+            weakUsed++;
+            bag = bag.filter(x => pid(x) !== pid(p));
+          } else {
+            p = fresh();
+          }
+        }
+        seen.add(pid(p));
+        return p;
+      },
+    };
+  }
 
   // ---------- 아이콘 ----------
   const I = {
@@ -643,18 +741,14 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
   // ---------- 홈 ----------
   function renderHome() {
-    const isPct = S.section === 'pct';
-    const weakN = weakList(S.section).length;
-    const best = isPct ? S.bestPct : S.best;
-    let picker = '';
-    if (isPct) {
-      picker = `<div class="levels">${Object.entries(PCT_TYPES).map(([k, T]) =>
-        `<button class="level${k === 'mix' ? ' wide' : ''}" data-act="ptype" data-v="${k}" aria-pressed="${S.pctType === k}"><b>${T.t}</b><span>${T.ex}</span></button>`).join('')}</div>`;
-    } else {
+    const sec = S.section;
+    const weakN = weakList(sec).length;
+    let picker;
+    if (sec === 'mult') {
       const r = ranges();
       const levelBtns = Object.entries(LEVELS).map(([k, L]) => {
-        const rr = L.a ? L : r;
-        return `<button class="level" data-act="level" data-v="${k}" aria-pressed="${S.level === k}"><b>${L.t}</b><span>${rr.a[0]}~${rr.a[1]} × ${rr.b[0]}~${rr.b[1]}</span></button>`;
+        const rr = L.sq ? { a: L.a, sq: true } : L.a ? L : r;
+        return `<button class="level" data-act="level" data-v="${k}" aria-pressed="${S.level === k}"><b>${L.t}</b><span>${rangeText(rr)}</span></button>`;
       }).join('');
       const c = S.custom;
       const step = (key, val) => `<span class="stepper"><button data-act="step" data-k="${key}" data-d="-1" aria-label="줄이기">−</button><output>${val}</output><button data-act="step" data-k="${key}" data-d="1" aria-label="늘리기">+</button></span>`;
@@ -664,19 +758,21 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
           <div class="crow"><span>뒤 수</span>${step('bMin', c.bMin)}<span class="tilde">~</span>${step('bMax', c.bMax)}</div>
         </div>`;
       picker = `<div class="levels">${levelBtns}</div>${custom}`;
+    } else {
+      const list = typeList(sec);
+      const btn = (k, title, ex, wide) => `<button class="level${wide ? ' wide' : ''}" data-act="ptype" data-v="${k}" aria-pressed="${S.types[sec] === k}"><b>${title}</b><span>${ex}</span></button>`;
+      picker = `<div class="levels">${btn('mix', '섞어서', `${list.length}가지 유형 모두`, true)}${list.map(t => btn(t, TYPES[t].title, TYPES[t].ex)).join('')}</div>`;
     }
     $('v-home').innerHTML = `
       <div class="brand"><h1>99단</h1><p>GSAT 수리 계산 연습장</p></div>
-      <div class="seg" role="tablist">
-        <button role="tab" data-act="section" data-v="mult" aria-selected="${!isPct}">곱셈</button>
-        <button role="tab" data-act="section" data-v="pct" aria-selected="${isPct}">퍼센트</button>
-      </div>
-      <div class="label">${isPct ? '유형' : '범위'}</div>
+      <div class="seg" role="tablist" style="grid-template-columns:repeat(${liveSections().length},1fr)">${liveSections().map(([k, t]) =>
+        `<button role="tab" data-act="section" data-v="${k}" aria-selected="${sec === k}">${t}</button>`).join('')}</div>
+      <div class="label">${sec === 'mult' ? '범위' : '유형'}</div>
       ${picker}
       <div class="label">연습</div>
       <div class="modes">
         <button class="mode" data-act="start" data-mode="practice"><span class="ico teal">${I.pencil}</span><span class="txt"><b>연습하기</b><span>${PRACTICE}문제 · 모르면 풀이 보기</span></span><span class="chev">${I.chev}</span></button>
-        <button class="mode" data-act="start" data-mode="ta"><span class="ico amber">${I.timer}</span><span class="txt"><b>타임어택</b><span>${TA_SECONDS / 60}분 도전 · 최고 기록 ${best}개</span></span><span class="chev">${I.chev}</span></button>
+        <button class="mode" data-act="start" data-mode="ta"><span class="ico amber">${I.timer}</span><span class="txt"><b>타임어택</b><span>${TA_SECONDS / 60}분 도전 · 최고 기록 ${S.bests[sec]}개</span></span><span class="chev">${I.chev}</span></button>
         <button class="mode" data-act="start" data-mode="review" ${weakN ? '' : 'disabled'}><span class="ico red">${I.redo}</span><span class="txt"><b>오답 집중</b><span>${weakN ? `틀리거나 풀이 본 문제 ${weakN}개 복습` : '아직 약한 문제가 없어요'}</span></span><span class="chev">${I.chev}</span></button>
       </div>
       <div class="links">
@@ -696,7 +792,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       if (!list.length) return show('home');
       pool = { list }; count = Math.min(30, list.length);
     } else {
-      pool = section === 'pct' ? { pct: S.pctType } : ranges();
+      pool = section === 'mult' ? ranges() : { section, type: S.types[section] };
       count = mode === 'ta' ? null : PRACTICE;
     }
     const picker = makePicker(pool);
@@ -713,8 +809,14 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     clearTimeout(advanceId); advanceId = null;
   }
 
+  // 문제 글자 수에 맞춰 큰 줄 글씨 크기 조절 (한 줄에 들어가게)
+  function fitProb(text) {
+    const w = Math.min(document.documentElement.clientWidth, 520) - 72;
+    return Math.max(24, Math.min(60, w / (text.length * 0.62))) + 'px';
+  }
+
   function renderQuiz() {
-    const p = Q.cur, pr = prompt(p);
+    const p = Q.cur, pr = prompt(p), ch = choices(p);
     if (Q.count) {
       $('q-count').textContent = `${Math.min(Q.answered + (Q.fb === 'none' ? 1 : 0), Q.count)} / ${Q.count}`;
       $('q-count').className = '';
@@ -730,19 +832,29 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
     const revealed = Q.fb === 'revealed';
     $('q-card').className = 'card' + (Q.fb === 'correct' ? ' correct' : Q.fb === 'wrong' ? ' wrong' : '');
-    for (const id of ['q-prob', 'q-sub', 'q-ans', 'q-fb']) $(id).hidden = revealed;
+    for (const id of ['q-prob', 'q-sub', 'q-fb']) $(id).hidden = revealed;
     $('q-hc').hidden = !revealed;
     $('q-prob').textContent = pr.main;
-    $('q-prob').className = 'prob' + (p.t === 'm' ? '' : ' pct');
+    $('q-prob').style.fontSize = fitProb(pr.main);
     $('q-sub').textContent = pr.sub;
     $('q-sub').hidden = revealed || !pr.sub;
+    $('q-ans').hidden = revealed || !!ch;
     $('q-ans').textContent = (Q.input || '?') + (Q.input ? unit(p) : '');
     $('q-ans').className = 'ans' + (Q.input ? '' : ' empty');
-    $('q-fb').textContent = Q.fb === 'correct' ? '정답!' : Q.fb === 'wrong' ? `정답은 ${answerText(p)}` : '';
-    if (revealed) $('q-hc').innerHTML = `<div class="hc-title">${calcTitle(p)}</div>${calcHTML(p)}`;
+    const v = Number(Q.input);
+    $('q-fb').textContent = Q.fb === 'correct' ? (v === answer(p) ? '정답!' : `정답! (정확히는 ${answerText(p)})`)
+                          : Q.fb === 'wrong' ? `정답은 ${answerText(p)}` : '';
+    if (revealed) $('q-hc').innerHTML = `<div class="hc-title">${calcTitle(p)}</div>${hintHTML(p)}`;
 
     $('q-hint').hidden = !(Q.fb === 'none' || Q.fb === 'wrong');
-    $('q-keys').hidden = revealed;
+    $('q-keys').hidden = revealed || !!ch;
+    $('q-choices').hidden = revealed || !ch;
+    if (ch) {
+      $('q-choices').innerHTML = ch.map((c, i) => {
+        const n = i + 1, state = Q.fb === 'none' ? '' : n === answer(p) ? ' right' : String(n) === Q.input ? ' picked' : '';
+        return `<button class="choice${state}" data-choice="${n}" ${Q.fb === 'none' ? '' : 'disabled'}>${c}</button>`;
+      }).join('');
+    }
     $('q-next').hidden = !revealed;
     $('q-ok').disabled = !(Q.input && Q.fb === 'none');
   }
@@ -756,10 +868,15 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     if (Q.fb !== 'none' || !Q.input) return;
     Q.input = Q.input.slice(0, -1); renderQuiz();
   }
+  function choose(n) {
+    const ch = choices(Q.cur);
+    if (Q.fb !== 'none' || !ch || n < 1 || n > ch.length) return;
+    Q.input = String(n); submit();
+  }
 
   function submit() {
     if (!Q.input || Q.fb !== 'none') return;
-    const p = Q.cur, ok = Number(Q.input) === answer(p);
+    const p = Q.cur, ok = accepts(p, Number(Q.input));
     const secs = (Date.now() - Q.qStart) / 1000;
     record(p, ok, secs);
     Q.answered++;
@@ -771,7 +888,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     renderQuiz();
     if (!ok) { const card = $('q-card'); void card.offsetWidth; card.classList.add('shake'); }
     const step = ++Q.step;
-    advanceId = setTimeout(() => { if (Q && Q.step === step) advance(); }, ok ? 400 : 1600);
+    const exact = Number(Q.input) === answer(p);
+    advanceId = setTimeout(() => { if (Q && Q.step === step) advance(); }, ok ? (exact ? 400 : 1200) : 1600);
   }
 
   // 풀이 보기: 아직 답을 안 냈으면 틀린 것으로 기록
@@ -784,6 +902,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     Q.step++; clearTimeout(advanceId);
     Q.input = ''; Q.fb = 'revealed';
     renderQuiz();
+    $('q-card').scrollTop = 0;
   }
 
   function advance() {
@@ -804,8 +923,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   function finish() {
     stopTimers();
     Q.ended = Date.now();
-    const bestKey = Q.section === 'pct' ? 'bestPct' : 'best';
-    if (Q.mode === 'ta' && Q.correct > S[bestKey]) { S[bestKey] = Q.correct; Q.newRecord = true; save(); }
+    if (Q.mode === 'ta' && Q.correct > S.bests[Q.section]) { S.bests[Q.section] = Q.correct; Q.newRecord = true; save(); }
     renderResult();
     show('result');
   }
@@ -816,11 +934,12 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     const avg = Q.correct ? (Q.ctime / Q.correct).toFixed(1) + '초' : '-';
     const secs = Math.round((Q.ended - Q.started) / 1000);
     const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`;
-    const best = Q.section === 'pct' ? S.bestPct : S.best;
+    const best = S.bests[Q.section];
     const seen = new Set();
     const uniq = Q.mistakes.filter(p => !seen.has(pid(p)) && seen.add(pid(p)));
     const title = Q.mode === 'ta' ? `${Q.correct}개 맞혔어요` : `${Q.answered}문제 중 ${Q.correct}개 정답`;
-    const kicker = (Q.section === 'pct' ? '퍼센트 ' : '곱셈 ') + { practice: '연습 끝', ta: '타임어택 끝', review: '오답 복습 끝' }[Q.mode];
+    const secName = SECTIONS.find(([k]) => k === Q.section)[1];
+    const kicker = `${secName} ` + { practice: '연습 끝', ta: '타임어택 끝', review: '오답 복습 끝' }[Q.mode];
     $('v-result').innerHTML = `
       <div class="res-head"><div class="kicker">${kicker}</div><h2>${title}</h2>${Q.newRecord ? '<span class="badge">신기록</span>' : ''}</div>
       <div class="tiles">
@@ -867,7 +986,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   function kindRows(list) {
     return list.map(([k, t]) => {
       let n = 0, c = 0, time = 0;
-      for (const [id, r] of Object.entries(S.records)) if (kindOf(parse(id)) === k) { n += r.c + r.w; c += r.c; time += r.t; }
+      for (const [id, r] of Object.entries(S.records)) if (knownId(id) && kindOf(parse(id)) === k) { n += r.c + r.w; c += r.c; time += r.t; }
       const acc = n ? Math.round(c / n * 100) : null;
       const color = acc === null ? '' : acc >= 90 ? 'var(--green)' : acc >= 70 ? 'var(--amber)' : 'var(--red)';
       return `<div class="kind"><div class="line"><b>${t}</b><span>${c ? `평균 ${(time / c).toFixed(1)}초 · ${n}문제` : ''}</span></div>
@@ -877,20 +996,20 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   }
 
   function renderStats() {
-    const recs = Object.values(S.records);
+    const recs = Object.entries(S.records).filter(([k]) => knownId(k)).map(([, r]) => r);
     const total = recs.reduce((s, r) => s + r.c + r.w, 0);
     const correct = recs.reduce((s, r) => s + r.c, 0);
     const weak = weakList().slice(0, 10).map(p => {
       const r = S.records[pid(p)];
       return `<button class="row" data-act="calc" data-id="${pid(p)}"><span class="grow">${label(p)} = ${answerText(p)}</span><span class="sub">✗${r.w} ✓${r.c}</span>${I.bulb}</button>`;
     }).join('');
+    const kindsOf = sec => sec === 'mult' ? MULT_KINDS : typeList(sec).map(t => [t, TYPES[t].title]);
     $('v-stats').innerHTML = `${topBar('내 기록')}
       <div class="tiles">
         <div class="tile"><b>${total}</b><span>푼 문제</span></div>
         <div class="tile"><b>${total ? Math.round(correct / total * 100) + '%' : '-'}</b><span>전체 정답률</span></div>
       </div>
-      <div class="list" style="margin-top:12px"><div class="list-head"><b>곱셈</b><span>타임어택 최고 ${S.best}개</span></div>${kindRows(KINDS.mult)}</div>
-      <div class="list" style="margin-top:12px"><div class="list-head"><b>퍼센트</b><span>타임어택 최고 ${S.bestPct}개</span></div>${kindRows(KINDS.pct)}</div>
+      ${SECTIONS.map(([sec, name]) => `<div class="list" style="margin-top:12px"><div class="list-head"><b>${name}</b><span>타임어택 최고 ${S.bests[sec]}개</span></div>${kindRows(kindsOf(sec))}</div>`).join('')}
       <div class="list" style="margin-top:12px"><div class="list-head"><b>자주 틀리는 문제</b><span>눌러서 풀이</span></div>
         ${weak || '<div class="row" style="border-top:0;color:var(--muted);font-family:var(--font-body)">아직 없어요</div>'}</div>
       <div style="margin-top:12px">${confirmReset
@@ -900,18 +1019,23 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
   // ---------- 풀이 시트 ----------
   function openCalc(id) {
+    if (!knownId(id)) return;
     const p = parse(id);
-    $('sheet-panel').innerHTML = `<h3>${calcTitle(p)}</h3><div class="hc-wrap">${calcHTML(p)}</div><button class="big-btn ghost" data-act="close-sheet">닫기</button>`;
+    $('sheet-panel').innerHTML = `<h3>${calcTitle(p)}</h3><div class="hc-wrap">${hintHTML(p)}</div><button class="big-btn ghost" data-act="close-sheet">닫기</button>`;
     $('sheet').hidden = false;
   }
 
   // ---------- 입력 ----------
   document.addEventListener('click', e => {
-    const keyEl = e.target.closest('[data-key]');
-    if (keyEl && Q && current === 'quiz') {
-      const k = keyEl.dataset.key;
-      if (k === 'del') del(); else if (k === 'ok') submit(); else typeDigit(k);
-      return;
+    if (Q && current === 'quiz') {
+      const keyEl = e.target.closest('[data-key]');
+      if (keyEl) {
+        const k = keyEl.dataset.key;
+        if (k === 'del') del(); else if (k === 'ok') submit(); else typeDigit(k);
+        return;
+      }
+      const chEl = e.target.closest('[data-choice]');
+      if (chEl) { choose(Number(chEl.dataset.choice)); return; }
     }
     const el = e.target.closest('[data-act]');
     if (!el) return;
@@ -920,7 +1044,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     switch (act) {
       case 'section': S.section = el.dataset.v; save(); renderHome(); break;
       case 'level': S.level = el.dataset.v; save(); renderHome(); break;
-      case 'ptype': S.pctType = el.dataset.v; save(); renderHome(); break;
+      case 'ptype': S.types[S.section] = el.dataset.v; save(); renderHome(); break;
       case 'step': {
         const k = el.dataset.k, lo = k[0] === 'a' ? 11 : 2;
         S.custom[k] = Math.min(99, Math.max(lo, S.custom[k] + Number(el.dataset.d)));
@@ -938,7 +1062,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
       case 'reset': confirmReset = true; renderStats(); break;
       case 'reset-no': confirmReset = false; renderStats(); break;
       case 'reset-yes':
-        S = { ...defaults(), section: S.section, level: S.level, pctType: S.pctType, custom: S.custom, tableN: S.tableN };
+        S = { ...defaults(), section: S.section, level: S.level, types: S.types, custom: S.custom, tableN: S.tableN };
         save(); confirmReset = false; renderStats(); break;
     }
   });
@@ -954,7 +1078,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   document.addEventListener('keydown', e => {
     if (!$('sheet').hidden && e.key === 'Escape') { $('sheet').hidden = true; return; }
     if (current !== 'quiz' || !Q) return;
-    if (/^[0-9]$/.test(e.key)) typeDigit(e.key);
+    if (/^[0-9]$/.test(e.key)) { if (choices(Q.cur)) choose(Number(e.key)); else typeDigit(e.key); }
     else if (e.key === 'Backspace') del();
     else if (e.key === 'Enter') { Q.fb === 'revealed' ? advance() : submit(); }
     else if (e.key === 'h' || e.key === '?') reveal();
